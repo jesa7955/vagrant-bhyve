@@ -1,4 +1,4 @@
-module Vagrant
+module VagrantPlugins
   module Bhyve
     VERSION = "0.1.0"
   end
