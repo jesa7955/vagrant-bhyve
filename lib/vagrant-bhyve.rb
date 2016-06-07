@@ -7,7 +7,6 @@ module VagrantPlugin
     autoload :Action, lib_path.join('action')
     autoload :Driver, lib_path.join('driver')
     autoload :Errors, lib_path.join('errors')
-    autoload :Util, lib_path.join('util')
 
 
     # This function returns the path to the source of this plugin

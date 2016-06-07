@@ -1,3 +1,4 @@
+require "vagrant/util/subprocess"
 require "log4r"
 
 module VagrantPlugins
@@ -19,3 +20,14 @@ module VagrantPlugins
 	  @@sudo = ''
 	else
 	  @@sudo = 'sudo'
+	end
+      end
+
+      def execute(command)
+	process = Subprocess.new(command)
+	process.execute
+      end
+
+    end
+  end
+end
