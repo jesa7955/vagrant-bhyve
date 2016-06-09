@@ -5,6 +5,7 @@ module VagrantPlugin
   module ProviderBhyve
     lib_path = Pathname.new(File.expand_path("../vagrant-bhyve", __FILE__))
     autoload :Action, lib_path.join('action')
+    autoload :Executor, lib_path.join('executor')
     autoload :Driver, lib_path.join('driver')
     autoload :Errors, lib_path.join('errors')
 

@@ -1,4 +1,5 @@
 {
     "provider"     : "libvirt",
+    "firmware"	   : "bios",
     "loader"       : "bhyveload"
 }

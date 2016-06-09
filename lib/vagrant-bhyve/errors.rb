@@ -7,8 +7,12 @@ module VagrantPlugins
 	error_namespace('vagrant_bhyve.errors')
       end
 
-      class NotRootUser << VagrantError
+      class HasNoRootPrivilege << VagrantBhyveError
 	error_key(:has_no_root_privilege)
+      end
+
+      class ExecuteError << VagrantBhyveError
+	error_key(:execute_error)
       end
 
     end
