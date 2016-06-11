@@ -22,6 +22,14 @@ module VagrantPlugins
       class UnableToCreateBridge < VagrantError
 	error_key(:unable_to_create_brighe)
       end
+
+      class UnrecognizedLoader < VagrantError
+	error_key(:unrecognized_loader)
+      end
+
+      class GrubBhyveNotinstalled < VagrantError
+	error_key(:grub_bhyve_not_installed)
+      end
     end
   end
 end

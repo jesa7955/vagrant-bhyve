@@ -47,7 +47,44 @@ module VagrantPlugins
 	execute(false, @sudo, "ifconfig", bridge_name, "description", switch_name, "up")
       end
 
-      def loader(loader)
+      def load(loader, machine)
+	run_cmd = []
+	case loader
+	when 'bhyveload'
+	  run_cmd.push('bhyveload')
+	  # Set autoboot, and memory and disk
+	  run_cmd.push("-m").push("#{machine.config.memory}")
+	  #########################################################
+	  #		TBD: problem with disk name		  #
+	  #########################################################
+	  run_cmd.push("-d").push("#{machine.box.directory.join('disk.img').to_s}")
+	  run_cmd += %w(-e autoboot_delay=0)
+	when 'grub-bhyve'
+	  command = execute(false, %w(which grub-bhyve))
+	  raise Errors::GrubBhyveNotInstalled if command.length == 0
+	  run_cmd.push(command)
+	  run_cmd.push("-m").push("#{machine.box.directory.join('device.map').to_s}")
+	  run_cmd.push("-M").push("#{machine.config.memory}")
+	  # Maybe there should be some grub config in Vagrantfile, for now
+	  # we just use this hd0,1 as default root and don't use -d -g 
+	  # argument
+	  run_cmd += %w(-r hd0,1)
+	else
+	  raise Errors::UnrecognizedLoader
+	end
+	
+	# Find an available nmdm device and add it as loader's -m argument
+	nmdm_num = 1
+	while true
+	  result = execute(false, %w(ls -l /dev/ | grep).push("nmdm#{nmdm_num}A"))
+	  break if result.length == 0
+	  nmdm_num += 1
+	end
+	run_cmd.push("-c").push("/dev/nmdm#{nmdm_num}A")
+
+	vm_name = machine.box.name.gsub('/', '_')
+	run_cmd.push(vm_name)
+	execute(false, run_cmd)
       end
 
       def bhyve

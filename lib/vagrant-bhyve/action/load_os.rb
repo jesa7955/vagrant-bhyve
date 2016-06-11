@@ -11,14 +11,19 @@ module VagrantPlugins
 	end
 
 	def call(env)
-	  @machine 	= env[:machine]
-	  @driver	= @machine.provider.driver
-	  firmware = @machine.box.metadata[:firmware]
-	  loader = @machine.box.metadata[:loader]
-	  @driver.loader(loader) if firmware == 'bios'
+	  machine 	= env[:machine]
+	  load(machine)
 	  @app.call(env)
 	end
 
+	private
+
+	def load(machine)
+	  driver	= machine.provider.driver
+	  firmware	= machine.box.metadata[:firmware]
+	  loader	= machine.box.metadata[:loader]
+	  driver.load(loader, machine) if firmware == 'bios'
+	end
       end
     end
   end
