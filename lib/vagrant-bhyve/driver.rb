@@ -22,6 +22,24 @@ module VagrantPlugins
 	end
       end
 
+      def check_bhyve_support
+	# Check whether FreeBSD version is lower than 10
+	result = execute(true, %w(test ${VERSION_BSD} -lt 1000000))
+	raise Errors::SystemVersionIsTooLow if result == 0
+
+	# Check whether POPCNT is supported
+	result = execute(false, %w(grep -E '^[ ] +Features2' /var/run/dresult.boot | tail -n 1))
+	raise Errors::MissingPopcnt unless result =~ /POPCNT/
+
+	# Check whether EPT is supported for Intel
+	result = execute(false, %w(grep -E '^[ ]+VT-x' /var/run/dresult.boot | tail -n 1))
+	raise Errors::MissingEpt unless result =~ /EPT/
+
+	# Check VT-d 
+	result = execute(false, %w(acpidump -t | grep DMAR))
+	raise Errors::MissingIommu if result.length == 0 
+      end
+
       def load_module(module_name)
 	result = execute(true, @sudo, "kldstat", "-qm", module_name, ">/dev/null", "2>&1")
 	if result != 0
@@ -30,25 +48,29 @@ module VagrantPlugins
 	end
       end
 
-      def create_switch(switch_name)
-	return if switch_name.length == 0
+      def create_network_device(device_name, device_type)
+	return if device_name.length == 0
 
 	# Check whether the switch has been created
-	desc = switch_name + '\$'
+	desc = device_name + '\$'
 	cmd = %w(ifconfig -a | grep -B 1).push(desc).push("|")
 	cmd += %w(head -n 1 | awk -F: '{print $1}')
 	result = execute(false, cmd)
 	return if result.length != 0
 
 	# Create new bridge device
-	bridge_name = execute(false, @sudo, "ifconfig", "bridge", "create")
-	raise Errors::UnableToCreateBridge if bridge_name.length == 0
+	interface_name = execute(false, @sudo, "ifconfig", device_type, "create")
+	raise Errors::UnableToCreateBridge if interface_name.length == 0
 	# Add new created bridge device's description
-	execute(false, @sudo, "ifconfig", bridge_name, "description", switch_name, "up")
+	execute(false, @sudo, "ifconfig", interface_name, "description", device_name, "up")
+      end
+
+      def create_tap
+
       end
 
       def load(loader, machine)
-	run_cmd = []
+	run_cmd = [@sudo]
 	case loader
 	when 'bhyveload'
 	  run_cmd.push('bhyveload')
@@ -81,13 +103,54 @@ module VagrantPlugins
 	  nmdm_num += 1
 	end
 	run_cmd.push("-c").push("/dev/nmdm#{nmdm_num}A")
+	machine.env[:nmdm] = nmdm_num
 
 	vm_name = machine.box.name.gsub('/', '_')
 	run_cmd.push(vm_name)
 	execute(false, run_cmd)
       end
 
-      def bhyve
+      def bhyve(machine)
+	firmware	= machine.box.metadata[:firmware]
+	loader		= machine.box.metadata[:loader]
+	config		= machine.config
+
+	run_cmd = [@sudo]
+	# Prevent virtual CPU use 100% of host CPU
+	run_cmd += %w(bhyve -H -P)
+
+	# Generate ACPI tables for FreeBSD guest
+	run_cmd.push("-A") if loader == 'bhyveload'
+	
+	# For UEFI, we need to point a UEFI firmware which should be 
+	# included in the box.
+	if firmware == "uefi"
+	run_cmd += %w(-l bootrom,)
+	run_cmd.push(machine.box.directory.join('uefi.fd'))
+	end
+	
+	# Enable graphics if the box is configed so
+
+	# Allocate resources
+	run_cmd.push("-c").push(config.cpu)
+	run_cmd.push("-m").push(config.memory)
+
+	# Disk 
+	run_cmd += %w(-s 0, ahci-hd,)
+	run_cmd.push(config.box.directory.join("disk.img"))
+
+	# Tap device
+	run_cmd += %w(-s 1, virtio-net,)
+	run_cmd.push(machine.env[:tap])
+
+	# Console
+	run_cmd += %w(-l com1,)
+	run_cmd.push("/dev/nmdm#{machine.env[:nmdm]}A"
+
+	vm_name = machine.box.name.gsub('/', '_')
+	run_cmd.push(vm_name)
+
+	execute(false, run_cmd)
       end
 
       def state

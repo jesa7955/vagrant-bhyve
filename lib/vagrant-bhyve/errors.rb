@@ -7,6 +7,22 @@ module VagrantPlugins
 	error_namespace('vagrant_bhyve.errors')
       end
 
+      class SystemVersionIsTooLow < VagrantBhyveError
+	error_key(:system_version_too_low)
+      end
+
+      class MissingPopcnt < VagrantBhyveError
+	error_key(:missing_popcnt)
+      end
+
+      class MissingEpt < VagrantBhyveError
+	error_key(:missing_ept)
+      end
+
+      class MissingIommu < VagrantBhyveError
+	error_key(:missing_iommu)
+      end
+
       class HasNoRootPrivilege < VagrantBhyveError
 	error_key(:has_no_root_privilege)
       end

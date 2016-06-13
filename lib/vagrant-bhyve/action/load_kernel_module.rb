@@ -13,9 +13,10 @@ module VagrantPlugins
 	def call(env)
 	  @machine 	= env[:machine]
 	  @driver	= @machine.provider.driver
+	  @driver.check_bhyve_support
 	  module_list 	= %w(vmm nmdm if_bridge if_tap)
 	  for kernel_module in module_list
-	    driver.load_module(kernel_module)
+	    @driver.load_module(kernel_module)
 	  end
 	  @app.call(env)
 	end

@@ -3,20 +3,21 @@ require "log4r"
 module VagrantPlugins
   module ProviderBhyve
     module Action
-      class CreateSwitch
+      class CreateTap
 
 	def initialize(app, env)
-	  @logger = Log4r::Logger.new("vagrant_bhyve::action::create_switch")
+	  @logger = Log4r::Logger.new("vagrant_bhyve::action::create_tap")
 	  @app = app
 	end
 
 	def call(env)
 	  @machine 	= env[:machine]
 	  @driver	= @machine.provider.driver
-	  switch_list 	= %w(vagrant_bhyve_default_switch)
+	  tap_name	= "vagrant_bhyve_" + machine.box.name.gsub('/', '_')
+	  tap_list 	= [tap_name]
 	  # The switch name is used as created bridge device's description
-	  for switch in switch_list
-	    driver.create_network_device(switch, "bridge")
+	  for tap in tap_list
+	    driver.create_network_device(tap, "tap")
 	  end
 	  @app.call(env)
 	end
