@@ -67,7 +67,7 @@ module VagrantPlugins
       end
 
       # For now, only IPv4 is supported
-      def enable_nat(switch_name)
+      def enable_nat(switch_name, directory)
 	# Choose a subnet for this switch
 	bridge_name = get_interface_name(switch_name)	
 	index = bridge_name =~ /\d/
@@ -98,9 +98,12 @@ module VagrantPlugins
 	# Maybe we should have a ruby version
 	
 	# Change pf's configuration
-	execute(false, %w(echo 'nat on).push(gateway) + %w(from).push(sub_net + ".0/24") + %w(to any ->).push("(#{gateway})'").push("|").push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	pf_conf = directory.join("pf.conf")
+	execute(false, %w(echo 'nat on).push(gateway) + %w(from).push(sub_net + ".0/24") + %w(to any ->).push("(#{gateway})'").push("|") + %w(tee -a).push(pf_conf))
+	execute(false, %w(echo 'include).push(pf_conf + "'").push("|").push(@sudo) + %w(tee -a /etc/pf.conf))
+	restart_service("pf")
 	# Enable forwarding
-	execute(false, [@sudo] + %w(sysctl net.inet.ip.forwarding=1))
+	execute(false, [@sudo] + %w(sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1))
       end
 
       def load(loader, machine)
@@ -216,7 +219,15 @@ module VagrantPlugins
 	result = execute(false, cmd)
       end
 
-      def restart_service
+      def restart_service(service_name)
+	status = execute(true, ["service"].push(service_name) + %w(status >/dev/null 2>&1))
+	if status == 0
+	  cmd = "restart"
+	else
+	  cmd = "start"
+	end
+	status = execute(true, ["service"].push(service_name).push(cmd) + %w(>/dev/null 2>&1))
+	raise Errors::RestartServiceFailed if status != 0
       end
 
     end

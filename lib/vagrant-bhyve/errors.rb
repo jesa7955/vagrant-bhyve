@@ -50,6 +50,10 @@ module VagrantPlugins
       class SwitchNotCreated < VagrantBhyveError
 	error_key(:switch_not_created)
       end
+
+      class RestartServiceFailed < VagrantBhyveError
+	error_key(:restart_service_failed)
+      end
     end
   end
 end
