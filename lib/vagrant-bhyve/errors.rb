@@ -31,20 +31,24 @@ module VagrantPlugins
 	error_key(:execute_error)
       end
 
-      class UnableToLoadModule < VagrantError
+      class UnableToLoadModule < VagrantBhyveError
 	error_key(:unable_to_load_module)
       end
 
-      class UnableToCreateBridge < VagrantError
+      class UnableToCreateBridge < VagrantBhyveError
 	error_key(:unable_to_create_brighe)
       end
 
-      class UnrecognizedLoader < VagrantError
+      class UnrecognizedLoader < VagrantBhyveError
 	error_key(:unrecognized_loader)
       end
 
-      class GrubBhyveNotinstalled < VagrantError
+      class GrubBhyveNotinstalled < VagrantBhyveError
 	error_key(:grub_bhyve_not_installed)
+      end
+
+      class SwitchNotCreated < VagrantBhyveError
+	error_key(:switch_not_created)
       end
     end
   end

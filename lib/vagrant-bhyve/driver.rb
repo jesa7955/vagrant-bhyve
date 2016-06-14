@@ -1,4 +1,5 @@
 require "log4r"
+require "sudo"
 
 module VagrantPlugins
   module ProviderBhyve
@@ -28,15 +29,15 @@ module VagrantPlugins
 	raise Errors::SystemVersionIsTooLow if result == 0
 
 	# Check whether POPCNT is supported
-	result = execute(false, %w(grep -E '^[ ] +Features2' /var/run/dresult.boot | tail -n 1))
+	result = execute(false, [@sudo] + %w(grep -E '^[ ] +Features2' /var/run/dresult.boot | tail -n 1))
 	raise Errors::MissingPopcnt unless result =~ /POPCNT/
 
 	# Check whether EPT is supported for Intel
-	result = execute(false, %w(grep -E '^[ ]+VT-x' /var/run/dresult.boot | tail -n 1))
+	result = execute(false, [@sudo] + %w(grep -E '^[ ]+VT-x' /var/run/dresult.boot | tail -n 1))
 	raise Errors::MissingEpt unless result =~ /EPT/
 
 	# Check VT-d 
-	result = execute(false, %w(acpidump -t | grep DMAR))
+	result = execute(false, [@sudo] + %w(acpidump -t | grep DMAR))
 	raise Errors::MissingIommu if result.length == 0 
       end
 
@@ -52,21 +53,54 @@ module VagrantPlugins
 	return if device_name.length == 0
 
 	# Check whether the switch has been created
-	desc = device_name + '\$'
-	cmd = %w(ifconfig -a | grep -B 1).push(desc).push("|")
-	cmd += %w(head -n 1 | awk -F: '{print $1}')
-	result = execute(false, cmd)
-	return if result.length != 0
+	switch_iden = get_interface_name(device_name)
+	return if switch_iden.length != 0
 
 	# Create new bridge device
 	interface_name = execute(false, @sudo, "ifconfig", device_type, "create")
 	raise Errors::UnableToCreateBridge if interface_name.length == 0
 	# Add new created bridge device's description
 	execute(false, @sudo, "ifconfig", interface_name, "description", device_name, "up")
+
+	# Return the new created interface_name
+	interface_name
       end
 
-      def create_tap
+      # For now, only IPv4 is supported
+      def enable_nat(switch_name)
+	# Choose a subnet for this switch
+	bridge_name = get_interface_name(switch_name)	
+	index = bridge_name =~ /\d/
+	raise Errors::SwitchNotCreated unless index
+	bridge_num = bridge_name[indxe..-1]
+	sub_net = "172.16." + bridge_num
 
+	# Config IP for the switch
+	execute(false, "ifconfig", bridge_name, sub_net + ".1/24"
+
+	# Get default gateway
+	gateway = execute(false, %w(netstat -4rn | grep default | awk '{print $4}'))
+	
+	# Create a basic dnsmasq setting
+	# This is a version which user shell utility with sudo
+	# Basic settings
+	execute(false, %w(echo '#vm-bhyve dhcp' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.vagrant_bhyve))
+	execute(false, %w(echo 'port=0' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	execute(false, %w(echo 'domain-needed' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	execute(false, %w(echo 'no-resolv' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	execute(false, %w(echo 'except-interface=lo0' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	execute(false, %w(echo 'bind-interfaces' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	execute(false, %w(echo 'local-service' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	execute(false, %w(echo 'dhcp-authoritative' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	# DHCP part
+	execute(false, ["echo"].push("interface=#{bridge_name}").push("|").push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	execute(false, ["echo"].push("dhcp-range=#{sub_net + ".10," + subnet + ".254"}").push("|").push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	# Maybe we should have a ruby version
+	
+	# Change pf's configuration
+	execute(false, %w(echo 'nat on).push(gateway) + %w(from).push(sub_net + ".0/24") + %w(to any ->).push("(#{gateway})'").push("|").push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	# Enable forwarding
+	execute(false, [@sudo] + %w(sysctl net.inet.ip.forwarding=1))
       end
 
       def load(loader, machine)
@@ -170,6 +204,19 @@ module VagrantPlugins
 
       def execute(*cmd, **opts, &block)
 	@executor.execute(*cmd, **opts, &block)
+      end
+
+      private
+
+      # Get the interface name for a switch(like 'bridge0')
+      def get_interface_name(device_name)
+	desc = device_name + '\$'
+	cmd = %w(ifconfig -a | grep -B 1).push(desc).push("|")
+	cmd += %w(head -n 1 | awk -F: '{print $1}')
+	result = execute(false, cmd)
+      end
+
+      def restart_service
       end
 
     end
