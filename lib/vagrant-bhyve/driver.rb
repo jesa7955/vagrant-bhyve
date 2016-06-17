@@ -67,7 +67,7 @@ module VagrantPlugins
       end
 
       # For now, only IPv4 is supported
-      def enable_nat(switch_name, directory)
+      def enable_nat(switch_name, directory, ui)
 	# Choose a subnet for this switch
 	bridge_name = get_interface_name(switch_name)	
 	index = bridge_name =~ /\d/
@@ -82,24 +82,29 @@ module VagrantPlugins
 	gateway = execute(false, %w(netstat -4rn | grep default | awk '{print $4}'))
 	
 	# Create a basic dnsmasq setting
-	# This is a version which user shell utility with sudo
 	# Basic settings
-	execute(false, %w(echo '#vm-bhyve dhcp' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.vagrant_bhyve))
-	execute(false, %w(echo 'port=0' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
-	execute(false, %w(echo 'domain-needed' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
-	execute(false, %w(echo 'no-resolv' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
-	execute(false, %w(echo 'except-interface=lo0' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
-	execute(false, %w(echo 'bind-interfaces' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
-	execute(false, %w(echo 'local-service' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
-	execute(false, %w(echo 'dhcp-authoritative' |).push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
+	dnsmasq_conf = directory.join("dnsmasq.conf")
+	dnsmasq_file = File.open(dnsmasq_conf, "w")
+	dnsmasq_file.puts <<-EOF
+	#vm-bhyve dhcp
+	port=0
+	domain-needed
+	no-resolv
+	except-interface=lo0
+	bind-interfaces
+	local-service
+	dhcp-authoritative
+	EOF
 	# DHCP part
-	execute(false, ["echo"].push("interface=#{bridge_name}").push("|").push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
-	execute(false, ["echo"].push("dhcp-range=#{sub_net + ".10," + subnet + ".254"}").push("|").push(@sudo) + %w(tee -a /usr/local/etc/dnsmasq.conf.bhyvent_bhyve))
-	# Maybe we should have a ruby version
+	dnsmasq_file.puts "interface=#{bridge_name}"
+	dnsmasq_file.puts "dhcp-range=#{sub_net + ".10," + subnet + ".254"}"
+	dnsmasq_file.close
 	
 	# Change pf's configuration
 	pf_conf = directory.join("pf.conf")
-	execute(false, %w(echo 'nat on).push(gateway) + %w(from).push(sub_net + ".0/24") + %w(to any ->).push("(#{gateway})'").push("|") + %w(tee -a).push(pf_conf))
+	pf_file = File.open(pf_conf, "w")
+	pf.file.puts "nat on #{gateway} from #{sub_net}.0/24 to any ->#{gateway}"
+	# We have to use shell utility to add this part to /etc/pf.conf for now
 	execute(false, %w(echo 'include).push(pf_conf + "'").push("|").push(@sudo) + %w(tee -a /etc/pf.conf))
 	restart_service("pf")
 	# Enable forwarding

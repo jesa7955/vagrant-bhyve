@@ -11,7 +11,7 @@ module VagrantPlugins
 	end
 
 	def call(env)
-	  machine 	= env[:machine]
+	  @machine 	= env[:machine]
 	  boot(machine)
 	  @app.call(env)
 	end
@@ -19,8 +19,8 @@ module VagrantPlugins
 	private
 
 	def boot(machine)
-	  driver	= machine.provider.driver
-	  driver.bhyve(machine)
+	  @driver	= machine.provider.driver
+	  @driver.bhyve(machine)
 	end
       end
     end

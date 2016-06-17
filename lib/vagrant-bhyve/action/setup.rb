@@ -3,10 +3,10 @@ require "log4r"
 module VagrantPlugins
   module ProviderBhyve
     module Action
-      class LoadKernelModule
+      class Setup
 
 	def initialize(app, env)
-	  @logger = Log4r::Logger.new("vagrant_bhyve::action::load_kernel_module")
+	  @logger = Log4r::Logger.new("vagrant_bhyve::action::setup")
 	  @app = app
 	end
 
