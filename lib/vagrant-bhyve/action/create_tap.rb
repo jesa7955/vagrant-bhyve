@@ -17,7 +17,8 @@ module VagrantPlugins
 	  tap_list 	= [tap_name]
 	  # The switch name is used as created bridge device's description
 	  for tap in tap_list
-	    @driver.create_network_device(tap, "tap")
+	    interface_name = @driver.create_network_device(tap, "tap", env)
+	    @machine.env[:tap] = interface_name
 	  end
 	  @app.call(env)
 	end

@@ -48,7 +48,7 @@ module VagrantPlugins
 	end
       end
 
-      def create_network_device(device_name, device_type)
+      def create_network_device(device_name, device_type, env = nil)
 	return if device_name.length == 0
 
 	# Check whether the switch has been created
@@ -61,6 +61,13 @@ module VagrantPlugins
 	# Add new created bridge device's description
 	execute(false, @sudo, "ifconfig", interface_name, "description", device_name, "up")
 
+	# Configure tap device
+	if device_name == 'tap' and env
+	  mtu = execute(false, ["ifconfig"].push(env[:switch]).push('|') + %w(head -n1 | awk '{print $NF}'))
+	  execute(false, "ifconfig", interface_name, "mtu", mtu) if mtu and mtu != '1500'
+	  # Add tap device into switch member
+	  execute(false, "ifconfig", env[:switch], "addm", interface_name)
+	end
 	# Return the new created interface_name
 	interface_name
       end
@@ -79,13 +86,15 @@ module VagrantPlugins
 
 	# Get default gateway
 	gateway = execute(false, %w(netstat -4rn | grep default | awk '{print $4}'))
+	# Add gateway as a bridge member
+	execute(false, "ifconfig", bridge_name, "addm", gateway)
 	
 	# Create a basic dnsmasq setting
 	# Basic settings
 	dnsmasq_conf = directory.join("dnsmasq.conf")
 	dnsmasq_file = File.open(dnsmasq_conf, "w")
 	dnsmasq_file.puts <<-EOF
-	#vm-bhyve dhcp
+	#vagrant-bhyve dhcp
 	port=0
 	domain-needed
 	no-resolv
@@ -102,6 +111,7 @@ module VagrantPlugins
 	# Change pf's configuration
 	pf_conf = directory.join("pf.conf")
 	pf_file = File.open(pf_conf, "w")
+	pf.file.puts "#vagrant-bhyve nat"
 	pf.file.puts "nat on #{gateway} from #{sub_net}.0/24 to any ->#{gateway}"
 	# We have to use shell utility to add this part to /etc/pf.conf for now
 	ui.warn "We are going change your /etc/pf.conf to enable nat for VMs"
@@ -114,8 +124,7 @@ module VagrantPlugins
       def get_ip_address(device_name)
 	interface_name = get_interface_name(device_name)
 	raise Errors::NetworkInterfaceNotCreated if interface_name != ''
-	interface_info = execute(false, "ifconfig", interface_name)
-	low = interface_info =~ /inet/
+	interface_info = execute(false, "ifconfig", interface_name) low = interface_info =~ /inet/
       	up = interface_info =~ /netmask/
 	ip = interface_info[low..up].split[1]
       end
@@ -147,14 +156,8 @@ module VagrantPlugins
 	end
 	
 	# Find an available nmdm device and add it as loader's -m argument
-	nmdm_num = 1
-	while true
-	  result = execute(false, %w(ls -l /dev/ | grep).push("nmdm#{nmdm_num}A"))
-	  break if result.length == 0
-	  nmdm_num += 1
-	end
+	nmdm_num = find_available_nmdm
 	run_cmd.push("-c").push("/dev/nmdm#{nmdm_num}A")
-	machine.env[:nmdm] = nmdm_num
 
 	vm_name = machine.box.name.gsub('/', '_')
 	run_cmd.push(vm_name)
@@ -169,6 +172,17 @@ module VagrantPlugins
 	run_cmd = [@sudo]
 	# Prevent virtual CPU use 100% of host CPU
 	run_cmd += %w(bhyve -H -P)
+
+	# Configure for hostbridge & lpc device, Windows need slot 0 and 31
+	# while others don't care, so we use slot 0 and 31
+	case config.hostbridge
+	when 'amd'
+	  run_cmd += %w(-s 0,amd_hostbridge)
+	when 'no'
+	else
+	  run_cmd += %w(-s 0,hostbridge)
+	end
+	run_cmd += %w(-s 31,lpc)
 
 	# Generate ACPI tables for FreeBSD guest
 	run_cmd.push("-A") if loader == 'bhyveload'
@@ -187,16 +201,18 @@ module VagrantPlugins
 	run_cmd.push("-m").push(config.memory)
 
 	# Disk 
-	run_cmd += %w(-s 0, ahci-hd,)
+	run_cmd += %w(-s 1, ahci-hd,)
 	run_cmd.push(config.box.directory.join("disk.img"))
 
 	# Tap device
-	run_cmd += %w(-s 1, virtio-net,)
+	run_cmd += %w(-s 2, virtio-net,)
 	run_cmd.push(machine.env[:tap])
 
 	# Console
+	nmdm_num = find_available_nmdm
+	machine.env[:nmdm] = nmdm_num
 	run_cmd += %w(-l com1,)
-	run_cmd.push("/dev/nmdm#{machine.env[:nmdm]}A"
+	run_cmd.push("/dev/nmdm#{nmdm_num}A"
 
 	vm_name = machine.box.name.gsub('/', '_')
 	run_cmd.push(vm_name)
@@ -243,6 +259,16 @@ module VagrantPlugins
 	status = execute(true, ["service"].push(service_name).push(cmd) + %w(>/dev/null 2>&1))
 	raise Errors::RestartServiceFailed if status != 0
       end
+
+      def find_available_nmdm
+	while true
+	  result = execute(false, %w(ls -l /dev/ | grep).push("nmdm#{nmdm_num}A"))
+	  break if result.length == 0
+	  nmdm_num += 1
+	end
+	nmdm_num
+      end
+	end
 
     end
   end

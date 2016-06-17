@@ -18,8 +18,9 @@ module VagrantPlugins
 	  ui = @machine.ui
 	  # The switch name is used as created bridge device's description
 	  for switch in switch_list
-	    @driver.create_network_device(switch, "bridge")
-	    @driver.enable_net(switch, directory, ui)
+	    bridge_name = @driver.create_network_device(switch, "bridge")
+	    @driver.enable_nat(switch, directory, ui)
+	    machine.env[:switch] = bridge_name
 	  end
 	  @app.call(env)
 	end
