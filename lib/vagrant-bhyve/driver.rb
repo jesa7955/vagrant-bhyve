@@ -1,5 +1,4 @@
 require "log4r"
-require "sudo"
 
 module VagrantPlugins
   module ProviderBhyve
@@ -71,7 +70,7 @@ module VagrantPlugins
 	# Choose a subnet for this switch
 	bridge_name = get_interface_name(switch_name)	
 	index = bridge_name =~ /\d/
-	raise Errors::SwitchNotCreated unless index
+	raise Errors::NerworkInterfaceNotCreated unless index
 	bridge_num = bridge_name[indxe..-1]
 	sub_net = "172.16." + bridge_num
 
@@ -105,10 +104,20 @@ module VagrantPlugins
 	pf_file = File.open(pf_conf, "w")
 	pf.file.puts "nat on #{gateway} from #{sub_net}.0/24 to any ->#{gateway}"
 	# We have to use shell utility to add this part to /etc/pf.conf for now
+	ui.warn "We are going change your /etc/pf.conf to enable nat for VMs"
 	execute(false, %w(echo 'include).push(pf_conf + "'").push("|").push(@sudo) + %w(tee -a /etc/pf.conf))
 	restart_service("pf")
 	# Enable forwarding
 	execute(false, [@sudo] + %w(sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1))
+      end
+
+      def get_ip_address(device_name)
+	interface_name = get_interface_name(device_name)
+	raise Errors::NetworkInterfaceNotCreated if interface_name != ''
+	interface_info = execute(false, "ifconfig", interface_name)
+	low = interface_info =~ /inet/
+      	up = interface_info =~ /netmask/
+	ip = interface_info[low..up].split[1]
       end
 
       def load(loader, machine)

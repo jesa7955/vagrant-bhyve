@@ -47,7 +47,7 @@ module VagrantPlugins
 	error_key(:grub_bhyve_not_installed)
       end
 
-      class SwitchNotCreated < VagrantBhyveError
+      class NerworkInterfaceNotCreated < VagrantBhyveError
 	error_key(:switch_not_created)
       end
 
