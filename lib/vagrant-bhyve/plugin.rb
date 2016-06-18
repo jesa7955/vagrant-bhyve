@@ -30,7 +30,7 @@ module VagrantPlugins
       # This initializes the internationalization strings.
       def self.setup_i18n
         I18n.load_path << File.expand_path('locales/en.yml',
-                                           ProviderLibvirt.source_root)
+                                           ProviderBhyve.source_root)
         I18n.reload!
       end
 
@@ -56,7 +56,7 @@ module VagrantPlugins
         # Set the logging level on all "vagrant" namespaced
         # logs as long as we have a valid level.
         if level
-          logger = Log4r::Logger.new('vagrant_libvirt')
+          logger = Log4r::Logger.new('vagrant_bhyve')
           logger.outputters = Log4r::Outputter.stderr
           logger.level = level
           logger = nil

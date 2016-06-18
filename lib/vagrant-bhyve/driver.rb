@@ -73,7 +73,7 @@ module VagrantPlugins
       end
 
       # For now, only IPv4 is supported
-      def enable_nat(switch_name, directory, ui)
+      def enable_nat(switch_name, machine, ui)
 	# Choose a subnet for this switch
 	bridge_name = get_interface_name(switch_name)	
 	index = bridge_name =~ /\d/
@@ -159,12 +159,12 @@ module VagrantPlugins
 	nmdm_num = find_available_nmdm
 	run_cmd.push("-c").push("/dev/nmdm#{nmdm_num}A")
 
-	vm_name = machine.box.name.gsub('/', '_')
+	vm_name = machine.env[:vm_name]
 	run_cmd.push(vm_name)
 	execute(false, run_cmd)
       end
 
-      def bhyve(machine)
+      def boot(machine)
 	firmware	= machine.box.metadata[:firmware]
 	loader		= machine.box.metadata[:loader]
 	config		= machine.config
@@ -214,10 +214,32 @@ module VagrantPlugins
 	run_cmd += %w(-l com1,)
 	run_cmd.push("/dev/nmdm#{nmdm_num}A"
 
-	vm_name = machine.box.name.gsub('/', '_')
+	vm_name = machine.env[:vm_name]
 	run_cmd.push(vm_name)
 
 	execute(false, run_cmd)
+      end
+
+      def shutdown(env)
+	ui = env[:ui]
+	vm_name = env[:vm_name]
+	if state == :not_running
+	  ui.warn "You are trying to shutdown a VM which is not running"
+	else
+	  bhyve_pid = execute(false, "pgrep", "-fx", "'bhyve: #{vm_name}'")
+	  loader_pid = execute(false, "pgrep -fl 'grub-bhyve|bhyveload'", " | ", "grep #{vm_name}", " | ", "cut -d' ' -f1")
+	  if bhyve_pid.length != 0
+	    execute(false, "kill", "SIGTERM", bhyve_pid)
+	    sleep 1
+	    execute(false, "kill", "SIGTERM", bhyve_pid)
+	  else if loader_pid.length != 0
+	    ui.warn "Guest is going to be exit in bootloader stage"
+	    execute(false, "kill", loader_pid)
+	    execute(false, "bhyvectl --destroy", "--vm=#{vm_name}", ">/dev/null 2>&1")
+	  else
+	    ui.warn "Unable to locate process id for #{vm_name}"
+	  end
+	end
       end
 
       def state
@@ -231,8 +253,8 @@ module VagrantPlugins
 	end
       end
 
-      def running?
-	execute(true, "test", "-e", "/dev/vmm/#{@machine.name}") == 0
+      def running?(vm_name)
+	execute(true, "test", "-e", "/dev/vmm/#{vm_name}") == 0
       end
 
       def execute(*cmd, **opts, &block)
