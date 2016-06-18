@@ -73,7 +73,9 @@ module VagrantPlugins
       end
 
       # For now, only IPv4 is supported
-      def enable_nat(switch_name, machine, ui)
+      def enable_nat(switch_name, env)
+	ui = env[:ui]
+	directory = env[:machine].box.directory
 	# Choose a subnet for this switch
 	bridge_name = get_interface_name(switch_name)	
 	index = bridge_name =~ /\d/
@@ -121,9 +123,7 @@ module VagrantPlugins
 	execute(false, [@sudo] + %w(sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1))
       end
 
-      def get_ip_address(device_name)
-	interface_name = get_interface_name(device_name)
-	raise Errors::NetworkInterfaceNotCreated if interface_name != ''
+      def get_ip_address(interface_name)
 	interface_info = execute(false, "ifconfig", interface_name) low = interface_info =~ /inet/
       	up = interface_info =~ /netmask/
 	ip = interface_info[low..up].split[1]
@@ -240,6 +240,16 @@ module VagrantPlugins
 	    ui.warn "Unable to locate process id for #{vm_name}"
 	  end
 	end
+      end
+
+      def port_forward(forward_information, pf_conf, tap_device)
+	pf_file = File.open(pf_conf, 'a')
+	ip_address = get_ip_address(tap_device)
+	tcp = "pass in on t10 proto tcp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
+	udp = "pass in on t10 proto udp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
+	pf_file.puts tcp
+	pf_file.puts udp
+	restart_service("pf")
       end
 
       def state
