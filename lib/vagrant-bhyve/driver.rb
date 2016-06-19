@@ -1,4 +1,6 @@
 require "log4r"
+require "fileutils"
+
 
 module VagrantPlugins
   module ProviderBhyve
@@ -93,7 +95,7 @@ module VagrantPlugins
 	
 	# Create a basic dnsmasq setting
 	# Basic settings
-	dnsmasq_conf = directory.join("dnsmasq.conf")
+	dnsmasq_conf = directory.join("dnsmasq.conf").to_s
 	dnsmasq_file = File.open(dnsmasq_conf, "w")
 	dnsmasq_file.puts <<-EOF
 	#vagrant-bhyve dhcp
@@ -111,12 +113,13 @@ module VagrantPlugins
 	dnsmasq_file.close
 	
 	# Change pf's configuration
-	pf_conf = directory.join("pf.conf")
+	pf_conf = directory.join("pf.conf").to_s
 	pf_file = File.open(pf_conf, "w")
 	pf.file.puts "#vagrant-bhyve nat"
 	pf.file.puts "nat on #{gateway} from #{sub_net}.0/24 to any ->#{gateway}"
 	# We have to use shell utility to add this part to /etc/pf.conf for now
 	ui.warn "We are going change your /etc/pf.conf to enable nat for VMs"
+	execute(false, %w(echo '# Include pf configure file to enable NAT for vagrant-bhyve').push("|").push(@sudo) + %w(tee -a /etc/pf.conf))
 	execute(false, %w(echo 'include).push(pf_conf + "'").push("|").push(@sudo) + %w(tee -a /etc/pf.conf))
 	restart_service("pf")
 	# Enable forwarding
@@ -252,6 +255,23 @@ module VagrantPlugins
 	pf_file.puts tcp
 	pf_file.puts udp
 	restart_service("pf")
+      end
+
+      def cleanup(env)
+	switch = env[:switch]
+	tap = env[:tap]
+	directory = env[:machine].box.directory
+
+	# Destory network interfaces
+	execute(false, @sudo, "ifconfg", switch, "destroy") if switch.length != 0
+	execute(false, @sudo, "ifconfg", tap, "destroy") if tap.length != 0
+
+	# Delete configure files
+	FileUtils.rm directory.join('').to_s
+	FileUtils.rm directory.join('').to_s
+
+	# Clean /etc/pf.conf
+	execute(false, "sed -I''",  "'/# Include pf configure file to enable NAT for vagrant-bhyve/ {N;d;}'", "/etc/pf.conf")
       end
 
       def state
