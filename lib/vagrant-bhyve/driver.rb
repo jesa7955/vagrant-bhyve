@@ -229,13 +229,15 @@ module VagrantPlugins
 	  bhyve_pid = execute(false, "pgrep", "-fx", "'bhyve: #{vm_name}'")
 	  loader_pid = execute(false, "pgrep -fl 'grub-bhyve|bhyveload'", " | ", "grep #{vm_name}", " | ", "cut -d' ' -f1")
 	  if bhyve_pid.length != 0
-	    execute(false, "kill", "SIGTERM", bhyve_pid)
+	    # We need to kill bhyve process twice and wait some time to make
+	    # sure VM is shuted down.
+	    execute(false, @sudo, "kill", "SIGTERM", bhyve_pid)
 	    sleep 1
-	    execute(false, "kill", "SIGTERM", bhyve_pid)
+	    execute(false, @sudo, "kill", "SIGTERM", bhyve_pid)
 	  else if loader_pid.length != 0
 	    ui.warn "Guest is going to be exit in bootloader stage"
-	    execute(false, "kill", loader_pid)
-	    execute(false, "bhyvectl --destroy", "--vm=#{vm_name}", ">/dev/null 2>&1")
+	    execute(false, @sudo, "kill", loader_pid)
+	    execute(false, @sudo, "bhyvectl --destroy", "--vm=#{vm_name}", ">/dev/null 2>&1")
 	  else
 	    ui.warn "Unable to locate process id for #{vm_name}"
 	  end

@@ -3,10 +3,10 @@ require "log4r"
 module VagrantPlugins
   module ProviderBhyve
     module Action
-      class ShutdownOS
+      class Shutdown
 
 	def initialize(app, env)
-	  @logger = Log4r::Logger.new("vagrant_bhyve::action::shutdown_os")
+	  @logger = Log4r::Logger.new("vagrant_bhyve::action::shutdown")
 	  @app = app
 	end
 
