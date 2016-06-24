@@ -170,7 +170,7 @@ module VagrantPlugins
 	firmware	= machine.box.metadata[:firmware]
 	loader		= machine.box.metadata[:loader]
 	directory	= machine.box.directory
-	config		= machine.config
+	config		= machine.provider_config
 
 	run_cmd = @sudo
 	# Prevent virtual CPU use 100% of host CPU
@@ -250,10 +250,10 @@ module VagrantPlugins
 	restart_service("pf")
       end
 
-      def cleanup(env)
-	switch = env[:switch]
-	tap = env[:tap]
-	directory = env[:machine].box.directory
+      def cleanup(machine)
+	switch		= machine.env[:switch]
+	tap		= machine.env[:tap]
+	directory	= machine.box.directory
 
 	# Destory network interfaces
 	execute(false, "#{@sudo} ifconfg #{switch} destroy") if switch.length != 0
