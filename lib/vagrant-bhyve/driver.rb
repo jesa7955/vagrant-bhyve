@@ -50,17 +50,17 @@ module VagrantPlugins
 	end
       end
 
-      def create_network_device(device_name, device_type, env = nil)
+      def create_network_device(device_name, device_type, env)
 	return if device_name.length == 0
 
 	# Check whether the switch has been created
 	switch_iden = get_interface_name(device_name)
 	return if switch_iden.length != 0
 
-	# Create new bridge device
+	# Create new virtual device
 	interface_name = execute(false, "#{@sudo} ifconfig #{device_type} create")
 	raise Errors::UnableToCreateBridge if interface_name.length == 0
-	# Add new created bridge device's description
+	# Add new created device's description
 	execute(false, "#{@sudo} ifconfig #{interface_name} description #{device_name} up")
 
 	# Configure tap device
@@ -75,9 +75,8 @@ module VagrantPlugins
       end
 
       # For now, only IPv4 is supported
-      def enable_nat(switch_name, env)
-	ui = env[:ui]
-	directory = env[:machine].box.directory
+      def enable_nat(switch_name, machine, ui)
+	directory	= machine.box.directory
 	# Choose a subnet for this switch
 	bridge_name = get_interface_name(switch_name)	
 	index = bridge_name =~ /\d/
@@ -170,6 +169,7 @@ module VagrantPlugins
       def boot(machine)
 	firmware	= machine.box.metadata[:firmware]
 	loader		= machine.box.metadata[:loader]
+	directory	= machine.box.directory
 	config		= machine.config
 
 	run_cmd = @sudo
@@ -192,7 +192,7 @@ module VagrantPlugins
 	
 	# For UEFI, we need to point a UEFI firmware which should be 
 	# included in the box.
-	run_cmd += " -l bootrom,#{machine.box.directory.join('uefi.fd').to_s}" if firmware == "uefi"
+	run_cmd += " -l bootrom,#{directory.join('uefi.fd').to_s}" if firmware == "uefi"
 	
 	# Enable graphics if the box is configed so
 
@@ -201,7 +201,7 @@ module VagrantPlugins
 	run_cmd += " -m #{config.memory}"
 
 	# Disk 
-	run_cmd += " -s 1, ahci-hd,#{config.box.directory.join("disk.img").to_s}"
+	run_cmd += " -s 1, ahci-hd,#{directory.join("disk.img").to_s}"
 
 	# Tap device
 	run_cmd += " -s 2, virtio-net,#{machine.env[:tap]}"
@@ -217,8 +217,7 @@ module VagrantPlugins
 	execute(false, run_cmd)
       end
 
-      def shutdown(env)
-	ui = env[:ui]
+      def shutdown(env, ui)
 	vm_name = env[:vm_name]
 	if state == :not_running
 	  ui.warn "You are trying to shutdown a VM which is not running"

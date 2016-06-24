@@ -33,7 +33,7 @@ module VagrantPlugins
 	      stdout: result.stdout
 	  end
 
-	  result.stdout
+	  result.stdout[0..-2]
 	end
       end
     end
