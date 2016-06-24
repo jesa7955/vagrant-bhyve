@@ -22,7 +22,62 @@ Or install it yourself as:
 
 ## Usage
 
-TODO: Write usage instructions here
+### Creating a box
+
+Box format is a plain directory consist of `Vagrantfile`, `metadata.json`, bhyve disk file, maybe `uefi.fd` file is optional.
+
+```
+../
+|- Vagrantfile      This is where Xhyve is configured.
+|- disk.img         The disk image
+|- metadata.json    Box metadata
+`- uefi.fd          UEFI firmware (only for guests who need uefi)
+```
+
+Available configurations for the provider are:
+
+* `memory`: amount of memory, e.g. `512M`
+* `cpus`: number of CPUs, e.g. `1`
+
+Here is steps needed to create a test box. Note `vagrant` here means vagrant binary installed by `vagrant-bhyve`, whose location is in `bin/`
+
+1. Create a `Vagrantfile` with the following contents:
+
+    ```ruby
+    Vagrant.configure("2") do |config|
+      config.vm.box = "test"
+
+      config.vm.provider :bhyve do |vm|
+        vm.memory = "512M"
+        vm.cpus = "1"
+      end
+    end
+    ```
+
+2. Create `metadata.json` with the following contents in the same directory as Vagrantfile:
+
+    ```json
+    {
+        "provider"    : "bhyve",
+        "firmware"    : "bios",
+        "loader"      : "bhyveload"
+    }
+    ```
+
+3. Download [FreeBSD-10.3-RELEASE-amd64.raw.xz](http://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/10.3-RELEASE/amd64/Latest/FreeBSD-10.3-RELEASE-amd64.raw.xz) and extract it to the same directory with Vagrantfile and metadata.json. Rename the img file into `disk.img`
+4. Run `tar cvzf test.box *` to create a box.
+5. `bin/vagrant box add test.box`
+
+### Running the box
+
+After a box is created, you can now start Bhyve VM with a standard Vagrantfile and `vagrant up`.
+
+```ruby
+Vagrant.configure("2") do |config|
+  config.vm.box = "test"
+end
+```
+
 
 ## Development
 
@@ -37,5 +92,4 @@ Bug reports and pull requests are welcome on GitHub at https://github.com/jesa79
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](http://opensource.org/licenses/MIT).
-
+BSD
