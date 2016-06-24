@@ -26,26 +26,26 @@ module VagrantPlugins
 
       def check_bhyve_support
 	# Check whether FreeBSD version is lower than 10
-	result = execute(true, %w(test ${VERSION_BSD} -lt 1000000))
+	result = execute(true, "test $(uname -K) -lt 1000000")
 	raise Errors::SystemVersionIsTooLow if result == 0
 
 	# Check whether POPCNT is supported
-	result = execute(false, [@sudo] + %w(grep -E '^[ ] +Features2' /var/run/dresult.boot | tail -n 1))
+	result = execute(false, "#{@sudo} grep -E '^[ ] +Features2' /var/run/dresult.boot | tail -n 1")
 	raise Errors::MissingPopcnt unless result =~ /POPCNT/
 
 	# Check whether EPT is supported for Intel
-	result = execute(false, [@sudo] + %w(grep -E '^[ ]+VT-x' /var/run/dresult.boot | tail -n 1))
+	result = execute(false, "#{@sudo} grep -E '^[ ]+VT-x' /var/run/dresult.boot | tail -n 1")
 	raise Errors::MissingEpt unless result =~ /EPT/
 
 	# Check VT-d 
-	result = execute(false, [@sudo] + %w(acpidump -t | grep DMAR))
+	result = execute(false, "#{@sudo} acpidump -t | grep DMAR")
 	raise Errors::MissingIommu if result.length == 0 
       end
 
       def load_module(module_name)
-	result = execute(true, @sudo, "kldstat", "-qm", module_name, ">/dev/null", "2>&1")
+	result = execute(true, "#{@sudo} kldstat -qm #{module_name} >/dev/null 2>&1")
 	if result != 0
-	  result = execute(true, @sudo, "kldload", module_name, ">/dev/null", "2>&1")
+	  result = execute(true, "#{@sudo} kldload #{module_name} >/dev/null 2>&1")
 	  result != 0 && raise Errors::UnableToLoadModule
 	end
       end
@@ -58,17 +58,17 @@ module VagrantPlugins
 	return if switch_iden.length != 0
 
 	# Create new bridge device
-	interface_name = execute(false, @sudo, "ifconfig", device_type, "create")
+	interface_name = execute(false, "#{@sudo} ifconfig #{device_type} create")
 	raise Errors::UnableToCreateBridge if interface_name.length == 0
 	# Add new created bridge device's description
-	execute(false, @sudo, "ifconfig", interface_name, "description", device_name, "up")
+	execute(false, "#{@sudo} ifconfig #{interface_name} description #{device_name} up")
 
 	# Configure tap device
 	if device_name == 'tap' and env
-	  mtu = execute(false, ["ifconfig"].push(env[:switch]).push('|') + %w(head -n1 | awk '{print $NF}'))
-	  execute(false, "ifconfig", interface_name, "mtu", mtu) if mtu and mtu != '1500'
+	  mtu = execute(false, "ifconfig #{env[:switch]} | head -n1 | awk '{print $NF}'")
+	  execute(false, "ifconfig #{interface_name} mtu #{mtu}") if mtu and mtu != '1500'
 	  # Add tap device into switch member
-	  execute(false, "ifconfig", env[:switch], "addm", interface_name)
+	  execute(false, "ifconfig #{env[:switch]} addm #{interface_name}")
 	end
 	# Return the new created interface_name
 	interface_name
@@ -86,12 +86,12 @@ module VagrantPlugins
 	sub_net = "172.16." + bridge_num
 
 	# Config IP for the switch
-	execute(false, "ifconfig", bridge_name, sub_net + ".1/24"
+	execute(false, "ifconfig #{bridge_name} #{sub_net}" + ".1/24")
 
 	# Get default gateway
-	gateway = execute(false, %w(netstat -4rn | grep default | awk '{print $4}'))
+	gateway = execute(false, "netstat -4rn | grep default | awk '{print $4}")
 	# Add gateway as a bridge member
-	execute(false, "ifconfig", bridge_name, "addm", gateway)
+	execute(false, "ifconfig #{bridge_name} addm #{gateway}")
 	
 	# Create a basic dnsmasq setting
 	# Basic settings
@@ -119,11 +119,11 @@ module VagrantPlugins
 	pf.file.puts "nat on #{gateway} from #{sub_net}.0/24 to any ->#{gateway}"
 	# We have to use shell utility to add this part to /etc/pf.conf for now
 	ui.warn "We are going change your /etc/pf.conf to enable nat for VMs"
-	execute(false, %w(echo '# Include pf configure file to enable NAT for vagrant-bhyve').push("|").push(@sudo) + %w(tee -a /etc/pf.conf))
-	execute(false, %w(echo 'include).push(pf_conf + "'").push("|").push(@sudo) + %w(tee -a /etc/pf.conf))
+	execute(false, "echo '# Include pf configure file to enable NAT for vagrant-bhyve' | #{@sudo} tee -a /etc/pf.conf")
+	execute(false, "echo 'include #{pf_conf}'| #{@sudo} tee -a /etc/pf.conf")
 	restart_service("pf")
 	# Enable forwarding
-	execute(false, [@sudo] + %w(sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1))
+	execute(false, "#{@sudo} sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1")
       end
 
       def get_ip_address(interface_name)
@@ -133,37 +133,37 @@ module VagrantPlugins
       end
 
       def load(loader, machine)
-	run_cmd = [@sudo]
+	run_cmd = @sudo
 	case loader
 	when 'bhyveload'
-	  run_cmd.push('bhyveload')
+	  run_cmd += ' bhyveload'
 	  # Set autoboot, and memory and disk
-	  run_cmd.push("-m").push("#{machine.config.memory}")
+	  run_cmd += " -m #{machine.config.memory}"
 	  #########################################################
 	  #		TBD: problem with disk name		  #
 	  #########################################################
-	  run_cmd.push("-d").push("#{machine.box.directory.join('disk.img').to_s}")
-	  run_cmd += %w(-e autoboot_delay=0)
+	  run_cmd += " -d #{machine.box.directory.join('disk.img').to_s}"
+	  run_cmd += " -e autoboot_delay=0"
 	when 'grub-bhyve'
-	  command = execute(false, %w(which grub-bhyve))
+	  command = execute(false, "which grub-bhyve")
 	  raise Errors::GrubBhyveNotInstalled if command.length == 0
-	  run_cmd.push(command)
-	  run_cmd.push("-m").push("#{machine.box.directory.join('device.map').to_s}")
-	  run_cmd.push("-M").push("#{machine.config.memory}")
+	  run_cmd += command
+	  run_cmd += " -m #{machine.box.directory.join('device.map').to_s}")
+	  run_cmd += " -M #{machine.config.memory}")
 	  # Maybe there should be some grub config in Vagrantfile, for now
 	  # we just use this hd0,1 as default root and don't use -d -g 
 	  # argument
-	  run_cmd += %w(-r hd0,1)
+	  run_cmd += " -r hd0,1"
 	else
 	  raise Errors::UnrecognizedLoader
 	end
 	
 	# Find an available nmdm device and add it as loader's -m argument
 	nmdm_num = find_available_nmdm
-	run_cmd.push("-c").push("/dev/nmdm#{nmdm_num}A")
+	run_cmd += "-c /dev/nmdm#{nmdm_num}A"
 
 	vm_name = machine.env[:vm_name]
-	run_cmd.push(vm_name)
+	run_cmd += " #{vm_name}"
 	execute(false, run_cmd)
       end
 
@@ -172,53 +172,47 @@ module VagrantPlugins
 	loader		= machine.box.metadata[:loader]
 	config		= machine.config
 
-	run_cmd = [@sudo]
+	run_cmd = @sudo
 	# Prevent virtual CPU use 100% of host CPU
-	run_cmd += %w(bhyve -H -P)
+	run_cmd += " bhyve -H -P"
 
 	# Configure for hostbridge & lpc device, Windows need slot 0 and 31
 	# while others don't care, so we use slot 0 and 31
 	case config.hostbridge
 	when 'amd'
-	  run_cmd += %w(-s 0,amd_hostbridge)
+	  run_cmd += " -s 0,amd_hostbridge"
 	when 'no'
 	else
-	  run_cmd += %w(-s 0,hostbridge)
+	  run_cmd += " -s 0,hostbridge"
 	end
-	run_cmd += %w(-s 31,lpc)
+	run_cmd += " -s 31,lpc "
 
 	# Generate ACPI tables for FreeBSD guest
-	run_cmd.push("-A") if loader == 'bhyveload'
+	run_cmd += " -A" if loader == 'bhyveload'
 	
 	# For UEFI, we need to point a UEFI firmware which should be 
 	# included in the box.
-	if firmware == "uefi"
-	run_cmd += %w(-l bootrom,)
-	run_cmd.push(machine.box.directory.join('uefi.fd'))
-	end
+	run_cmd += " -l bootrom,#{machine.box.directory.join('uefi.fd').to_s}" if firmware == "uefi"
 	
 	# Enable graphics if the box is configed so
 
 	# Allocate resources
-	run_cmd.push("-c").push(config.cpu)
-	run_cmd.push("-m").push(config.memory)
+	run_cmd += " -c #{config.cpu}"
+	run_cmd += " -m #{config.memory}"
 
 	# Disk 
-	run_cmd += %w(-s 1, ahci-hd,)
-	run_cmd.push(config.box.directory.join("disk.img"))
+	run_cmd += " -s 1, ahci-hd,#{config.box.directory.join("disk.img").to_s}"
 
 	# Tap device
-	run_cmd += %w(-s 2, virtio-net,)
-	run_cmd.push(machine.env[:tap])
+	run_cmd += " -s 2, virtio-net,#{machine.env[:tap]}"
 
 	# Console
 	nmdm_num = find_available_nmdm
 	machine.env[:nmdm] = nmdm_num
-	run_cmd += %w(-l com1,)
-	run_cmd.push("/dev/nmdm#{nmdm_num}A"
+	run_cmd += " -l com1,/dev/nmdm#{nmdm_num}A}"
 
 	vm_name = machine.env[:vm_name]
-	run_cmd.push(vm_name)
+	run_cmd += " #{vm_name}"
 
 	execute(false, run_cmd)
       end
@@ -229,18 +223,18 @@ module VagrantPlugins
 	if state == :not_running
 	  ui.warn "You are trying to shutdown a VM which is not running"
 	else
-	  bhyve_pid = execute(false, "pgrep", "-fx", "'bhyve: #{vm_name}'")
-	  loader_pid = execute(false, "pgrep -fl 'grub-bhyve|bhyveload'", " | ", "grep #{vm_name}", " | ", "cut -d' ' -f1")
+	  bhyve_pid = execute(false, "pgrep -fx 'bhyve: #{vm_name}'")
+	  loader_pid = execute(false, "pgrep -fl 'grub-bhyve|bhyveload' | grep #{vm_name} | cut -d' ' -f1")
 	  if bhyve_pid.length != 0
 	    # We need to kill bhyve process twice and wait some time to make
 	    # sure VM is shuted down.
-	    execute(false, @sudo, "kill", "SIGTERM", bhyve_pid)
+	    execute(false, "#{@sudo} kill SIGTERM #{bhyve_pid}")
 	    sleep 1
-	    execute(false, @sudo, "kill", "SIGTERM", bhyve_pid)
+	    execute(false, "#{@sudo} kill SIGTERM #{bhyve_pid}")
 	  else if loader_pid.length != 0
 	    ui.warn "Guest is going to be exit in bootloader stage"
-	    execute(false, @sudo, "kill", loader_pid)
-	    execute(false, @sudo, "bhyvectl --destroy", "--vm=#{vm_name}", ">/dev/null 2>&1")
+	    execute(false, "#{@sudo} kill #{loader_pid}")
+	    execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1")
 	  else
 	    ui.warn "Unable to locate process id for #{vm_name}"
 	  end
@@ -263,15 +257,15 @@ module VagrantPlugins
 	directory = env[:machine].box.directory
 
 	# Destory network interfaces
-	execute(false, @sudo, "ifconfg", switch, "destroy") if switch.length != 0
-	execute(false, @sudo, "ifconfg", tap, "destroy") if tap.length != 0
+	execute(false, "#{@sudo} ifconfg #{switch} destroy") if switch.length != 0
+	execute(false, "#{@sudo} ifconfg #{tap} destroy") if tap.length != 0
 
 	# Delete configure files
-	FileUtils.rm directory.join('').to_s
-	FileUtils.rm directory.join('').to_s
+	FileUtils.rm directory.join('dnsmasq.conf').to_s
+	FileUtils.rm directory.join('pf.conf').to_s
 
 	# Clean /etc/pf.conf
-	execute(false, "sed -I''",  "'/# Include pf configure file to enable NAT for vagrant-bhyve/ {N;d;}'", "/etc/pf.conf")
+	execute(false, "sed -I'' '/# Include pf configure file to enable NAT for vagrant-bhyve/ {N;d;}' /etc/pf.conf")
       end
 
       def state
@@ -286,7 +280,7 @@ module VagrantPlugins
       end
 
       def running?(vm_name)
-	execute(true, "test", "-e", "/dev/vmm/#{vm_name}") == 0
+	execute(true, "test -e /dev/vmm/#{vm_name}") == 0
       end
 
       def execute(*cmd, **opts, &block)
@@ -298,25 +292,24 @@ module VagrantPlugins
       # Get the interface name for a switch(like 'bridge0')
       def get_interface_name(device_name)
 	desc = device_name + '\$'
-	cmd = %w(ifconfig -a | grep -B 1).push(desc).push("|")
-	cmd += %w(head -n 1 | awk -F: '{print $1}')
+	cmd = "ifconfig -a | grep -B 1 #{desc} | head -n1 | awk -F: '{print $1}'"
 	result = execute(false, cmd)
       end
 
       def restart_service(service_name)
-	status = execute(true, ["service"].push(service_name) + %w(status >/dev/null 2>&1))
+	status = execute(true, "service #{service_name} status >/dev/null 2>&1")
 	if status == 0
 	  cmd = "restart"
 	else
 	  cmd = "start"
 	end
-	status = execute(true, ["service"].push(service_name).push(cmd) + %w(>/dev/null 2>&1))
+	status = execute(true, "service #{service_name} #{cmd} >/dev/null 2>&1")
 	raise Errors::RestartServiceFailed if status != 0
       end
 
       def find_available_nmdm
 	while true
-	  result = execute(false, %w(ls -l /dev/ | grep).push("nmdm#{nmdm_num}A"))
+	  result = execute(false, "ls -l /dev/ | grep 'nmdm#{nmdm_num}A'")
 	  break if result.length == 0
 	  nmdm_num += 1
 	end
