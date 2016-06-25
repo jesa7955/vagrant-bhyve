@@ -1,4 +1,5 @@
 require "pathname"
+require "vagrant/action/builder"
 
 module VagrantPlugins
   module ProviderBhyve
@@ -7,6 +8,7 @@ module VagrantPlugins
 
       action_root = Pathname.new(File.expand_path('../action', __FILE__))
       autoload :Setup, action_root.join('setup')
+      autoload :Import, action_root.join('import')
       autoload :CreateSwitch, action_root.join('create_switch')
       autoload :CreateTap, action_root.join('create_tap')
       autoload :Load, action_root.join('load')
@@ -46,14 +48,14 @@ module VagrantPlugins
 
       def self.action_up
 	Vagrant::Action::Builder.new.tap do |b|
-	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATE_ID do |env, b1|
+	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env, b1|
 	    if env[:result]
-	      b2.use HandleBox
+	      b1.use HandleBox
 	    end
 	  end
 
 	  b.use ConfigValidate
-	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATE_ID do |env,b1|
+	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env,b1|
 	    if env[:result]
 	      b1.use Import
 	    end

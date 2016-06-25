@@ -22,7 +22,7 @@ module VagrantPlugins
 	Config
       end
 
-      provider(:bhyve, parallel: true) do
+      provider(:bhyve) do
         require_relative "provider"
 	Provider
       end

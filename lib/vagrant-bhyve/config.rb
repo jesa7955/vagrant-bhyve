@@ -9,7 +9,7 @@ module VagrantPlugins
       # Resources needed for the VM.
       
       # Specify the number of virtual CPUs.
-      attr_accessor :cups
+      attr_accessor :cpus
       # Specify the size of guest physical memory.
       attr_accessor :memory
       # Specify virtual devices will be attached to bhyve's emulated

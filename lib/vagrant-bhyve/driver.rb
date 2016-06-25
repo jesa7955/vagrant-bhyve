@@ -24,6 +24,10 @@ module VagrantPlugins
 	end
       end
 
+      def import(machine)
+        FileUtils.cp_r(machine.box.directory.to_s, machine.data_dir.join(machine.id).to_s)
+      end
+
       def check_bhyve_support
 	# Check whether FreeBSD version is lower than 10
 	result = execute(true, "test $(uname -K) -lt 1000000")
@@ -46,7 +50,7 @@ module VagrantPlugins
 	result = execute(true, "#{@sudo} kldstat -qm #{module_name} >/dev/null 2>&1")
 	if result != 0
 	  result = execute(true, "#{@sudo} kldload #{module_name} >/dev/null 2>&1")
-	  result != 0 && raise Errors::UnableToLoadModule
+	  raise Errors::UnableToLoadModule if result != 0
 	end
       end
 
@@ -126,7 +130,8 @@ module VagrantPlugins
       end
 
       def get_ip_address(interface_name)
-	interface_info = execute(false, "ifconfig", interface_name) low = interface_info =~ /inet/
+	interface_info = execute(false, "ifconfig", interface_name)
+        low = interface_info =~ /inet/
       	up = interface_info =~ /netmask/
 	ip = interface_info[low..up].split[1]
       end
@@ -147,8 +152,8 @@ module VagrantPlugins
 	  command = execute(false, "which grub-bhyve")
 	  raise Errors::GrubBhyveNotInstalled if command.length == 0
 	  run_cmd += command
-	  run_cmd += " -m #{machine.box.directory.join('device.map').to_s}")
-	  run_cmd += " -M #{machine.config.memory}")
+	  run_cmd += " -m #{machine.box.directory.join('device.map').to_s}"
+	  run_cmd += " -M #{machine.config.memory}"
 	  # Maybe there should be some grub config in Vagrantfile, for now
 	  # we just use this hd0,1 as default root and don't use -d -g 
 	  # argument
@@ -220,7 +225,7 @@ module VagrantPlugins
 
       def shutdown(env, ui)
 	vm_name = env[:vm_name]
-	if state == :not_running
+	if state(vm_name) == :not_running
 	  ui.warn "You are trying to shutdown a VM which is not running"
 	else
 	  bhyve_pid = execute(false, "pgrep -fx 'bhyve: #{vm_name}'")
@@ -268,11 +273,11 @@ module VagrantPlugins
 	execute(false, "sed -I'' '/# Include pf configure file to enable NAT for vagrant-bhyve/ {N;d;}' /etc/pf.conf")
       end
 
-      def state
+      def state(vm_name)
 	# Prepare for other bhyve state which may be added in. For now, only
 	# running and not_running.
 	case
-	when running?
+	when running?(vm_name)
 	  :running
 	else
 	:not_running
@@ -286,8 +291,6 @@ module VagrantPlugins
       def execute(*cmd, **opts, &block)
 	@executor.execute(*cmd, **opts, &block)
       end
-
-      private
 
       # Get the interface name for a switch(like 'bridge0')
       def get_interface_name(device_name)
@@ -315,7 +318,6 @@ module VagrantPlugins
 	end
 	nmdm_num
       end
-	end
 
     end
   end

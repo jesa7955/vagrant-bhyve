@@ -1,7 +1,6 @@
 require "pathname"
-require "vagrant-bhyve/version"
 
-module VagrantPlugin
+module VagrantPlugins
   module ProviderBhyve
     lib_path = Pathname.new(File.expand_path("../vagrant-bhyve", __FILE__))
     autoload :Action, lib_path.join('action')
@@ -18,3 +17,5 @@ module VagrantPlugin
     end
   end
 end
+
+require "vagrant-bhyve/plugin"
