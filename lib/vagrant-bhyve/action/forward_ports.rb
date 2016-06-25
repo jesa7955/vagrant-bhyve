@@ -13,11 +13,12 @@ module VagrantPlugins
 	def call(env)
 	  @machine	= env[:machine]
 	  @driver	= @machine.provider.driver
-	  pf_conf 	= @machine.box.directory.join('pf.conf').to_s
+
+	  pf_conf 	= @machine.box.directory.join('pf.conf')
 	  tap_device 	= @machine.env[:tap]
 	  @env[:forwarded_ports].each do |item|
 	    forward_information = {
-	      adapter: item[:adapter] || 'eth0',
+	      adapter: item[:adapter] || 'em0',
 	      guest_port: item[:guest],
 	      host_port: item[:host]
 	    }

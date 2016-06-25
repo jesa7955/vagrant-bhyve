@@ -31,6 +31,7 @@ Box format is a plain directory consist of `Vagrantfile`, `metadata.json`, bhyve
 |- Vagrantfile      This is where Xhyve is configured.
 |- disk.img         The disk image
 |- metadata.json    Box metadata
+|- device.map	    Device map file (only for guests who need grub2-bhyve)
 `- uefi.fd          UEFI firmware (only for guests who need uefi)
 ```
 

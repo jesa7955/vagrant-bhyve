@@ -14,7 +14,7 @@ module VagrantPlugins
 	  @machine 	= env[:machine]
 	  @driver	= @machine.provider.driver
 
-	  @driver.cleanup(@machine)
+	  @driver.cleanup
 
 	  @app.call(env)
 	end

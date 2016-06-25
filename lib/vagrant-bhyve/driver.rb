@@ -9,23 +9,26 @@ module VagrantPlugins
       # This executor is responsible for actually executing commands, including 
       # bhyve, dnsmasq and other shell utils used to get VM's state
       attr_accessor :executor
-      
+
       def initialize(machine)
 	@logger = Log4r::Logger.new("vagrant_bhyve::driver")
 	@machine = machine
+	@data_dir = @machine.data_dir
 	@executor = Executor::Exec.new
 
 	# if vagrant is excecuted by root (or with sudo) then the variable
 	# will be empty string, otherwise it will be 'sudo' to make sure we
 	# can run bhyve, bhyveload and pf with sudo privilege
 	if Process.uid == 0
-	 @sudo = ''
-	@sudo = 'sudo'
+	  @sudo = ''
+	else
+	  @sudo = 'sudo'
 	end
       end
 
-      def import(machine)
-        FileUtils.cp_r(machine.box.directory.to_s, machine.data_dir.join(machine.id).to_s)
+      def import(id)
+	uuid_dir = @data_dir.join(id)
+	uuid_dir.mkdir unless log_dir.directory?
       end
 
       def check_bhyve_support
@@ -54,7 +57,7 @@ module VagrantPlugins
 	end
       end
 
-      def create_network_device(device_name, device_type, env)
+      def create_network_device(device_name, device_type)
 	return if device_name.length == 0
 
 	# Check whether the switch has been created
@@ -67,22 +70,26 @@ module VagrantPlugins
 	# Add new created device's description
 	execute(false, "#{@sudo} ifconfig #{interface_name} description #{device_name} up")
 
+	# Store the new created network device's name
+	@data_dir.join(device_type).open('w') do |device_file|
+	  device_file.write(interface_name)
+	end
+
 	# Configure tap device
-	if device_name == 'tap' and env
-	  mtu = execute(false, "ifconfig #{env[:switch]} | head -n1 | awk '{print $NF}'")
+	if device_name == 'tap'
+	  switch = get_name('bridge') 
+	  mtu = execute(false, "ifconfig #{switch} | head -n1 | awk '{print $NF}'")
 	  execute(false, "ifconfig #{interface_name} mtu #{mtu}") if mtu and mtu != '1500'
 	  # Add tap device into switch member
-	  execute(false, "ifconfig #{env[:switch]} addm #{interface_name}")
+	  execute(false, "ifconfig #{switch} addm #{interface_name}")
 	end
-	# Return the new created interface_name
-	interface_name
       end
 
       # For now, only IPv4 is supported
-      def enable_nat(switch_name, machine, ui)
-	directory	= machine.box.directory
+      def enable_nat(switch_name, ui)
+	directory	= @data_dir
+	bridge_name 	= get_interface_name(switch_name)	
 	# Choose a subnet for this switch
-	bridge_name = get_interface_name(switch_name)	
 	index = bridge_name =~ /\d/
 	raise Errors::NerworkInterfaceNotCreated unless index
 	bridge_num = bridge_name[indxe..-1]
@@ -93,37 +100,39 @@ module VagrantPlugins
 
 	# Get default gateway
 	gateway = execute(false, "netstat -4rn | grep default | awk '{print $4}")
+	@data_dir.join('gateway').open('w') { |gateway_file| gateway_file.write gateway }
 	# Add gateway as a bridge member
 	execute(false, "ifconfig #{bridge_name} addm #{gateway}")
-	
+
 	# Create a basic dnsmasq setting
 	# Basic settings
-	dnsmasq_conf = directory.join("dnsmasq.conf").to_s
-	dnsmasq_file = File.open(dnsmasq_conf, "w")
-	dnsmasq_file.puts <<-EOF
-	#vagrant-bhyve dhcp
-	port=0
-	domain-needed
-	no-resolv
-	except-interface=lo0
-	bind-interfaces
-	local-service
-	dhcp-authoritative
-	EOF
-	# DHCP part
-	dnsmasq_file.puts "interface=#{bridge_name}"
-	dnsmasq_file.puts "dhcp-range=#{sub_net + ".10," + subnet + ".254"}"
-	dnsmasq_file.close
-	
+	dnsmasq_conf = directory.join("dnsmasq.conf")
+	dnsmasq_conf.open("w") do |dnsmasq_file|
+	  dnsmasq_file.puts <<-EOF
+	  #vagrant-bhyve dhcp
+	  port=0
+	  domain-needed
+	  no-resolv
+	  except-interface=lo0
+	  bind-interfaces
+	  local-service
+	  dhcp-authoritative
+	  EOF
+	  # DHCP part
+	  dnsmasq_file.puts "interface=#{bridge_name}"
+	  dnsmasq_file.puts "dhcp-range=#{sub_net + ".10," + subnet + ".254"}"
+	end
+
 	# Change pf's configuration
 	pf_conf = directory.join("pf.conf").to_s
-	pf_file = File.open(pf_conf, "w")
-	pf.file.puts "#vagrant-bhyve nat"
-	pf.file.puts "nat on #{gateway} from #{sub_net}.0/24 to any ->#{gateway}"
+	pf_conf.open("w") do |pf_file|
+	  pf.file.puts "#vagrant-bhyve nat"
+	  pf.file.puts "nat on #{gateway} from {#{sub_net}.0/24} to any ->(#{gateway})"
+	end
 	# We have to use shell utility to add this part to /etc/pf.conf for now
 	ui.warn "We are going change your /etc/pf.conf to enable nat for VMs"
 	execute(false, "echo '# Include pf configure file to enable NAT for vagrant-bhyve' | #{@sudo} tee -a /etc/pf.conf")
-	execute(false, "echo 'include #{pf_conf}'| #{@sudo} tee -a /etc/pf.conf")
+	execute(false, "echo \"include #{pf_conf}\" | #{@sudo} tee -a /etc/pf.conf")
 	restart_service("pf")
 	# Enable forwarding
 	execute(false, "#{@sudo} sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1")
@@ -131,8 +140,8 @@ module VagrantPlugins
 
       def get_ip_address(interface_name)
 	interface_info = execute(false, "ifconfig", interface_name)
-        low = interface_info =~ /inet/
-      	up = interface_info =~ /netmask/
+	low = interface_info =~ /inet/
+	up = interface_info =~ /netmask/
 	ip = interface_info[low..up].split[1]
       end
 
@@ -153,7 +162,7 @@ module VagrantPlugins
 	  raise Errors::GrubBhyveNotInstalled if command.length == 0
 	  run_cmd += command
 	  run_cmd += " -m #{machine.box.directory.join('device.map').to_s}"
-	  run_cmd += " -M #{machine.config.memory}"
+	  run_cmd += " -M #{machine.provider_config.memory}"
 	  # Maybe there should be some grub config in Vagrantfile, for now
 	  # we just use this hd0,1 as default root and don't use -d -g 
 	  # argument
@@ -161,12 +170,12 @@ module VagrantPlugins
 	else
 	  raise Errors::UnrecognizedLoader
 	end
-	
+
 	# Find an available nmdm device and add it as loader's -m argument
 	nmdm_num = find_available_nmdm
 	run_cmd += "-c /dev/nmdm#{nmdm_num}A"
 
-	vm_name = machine.env[:vm_name]
+	vm_name = get_name('vm_name')
 	run_cmd += " #{vm_name}"
 	execute(false, run_cmd)
       end
@@ -195,11 +204,11 @@ module VagrantPlugins
 
 	# Generate ACPI tables for FreeBSD guest
 	run_cmd += " -A" if loader == 'bhyveload'
-	
+
 	# For UEFI, we need to point a UEFI firmware which should be 
 	# included in the box.
 	run_cmd += " -l bootrom,#{directory.join('uefi.fd').to_s}" if firmware == "uefi"
-	
+
 	# Enable graphics if the box is configed so
 
 	# Allocate resources
@@ -210,21 +219,22 @@ module VagrantPlugins
 	run_cmd += " -s 1,ahci-hd,#{directory.join("disk.img").to_s}"
 
 	# Tap device
-	run_cmd += " -s 2,virtio-net,#{machine.env[:tap]}"
+	tap_device = get_name('tap')
+	run_cmd += " -s 2,virtio-net,#{tap_device}"
 
 	# Console
 	nmdm_num = find_available_nmdm
-	machine.env[:nmdm] = nmdm_num
+	@data_dir.join('nmdm_num').open('w') { |nmdm_file| nmdm_file.write nmdm_num }
 	run_cmd += " -l com1,/dev/nmdm#{nmdm_num}A}"
 
-	vm_name = machine.env[:vm_name]
+	vm_name = get_name('vm_name')
 	run_cmd += " #{vm_name} >/dev/null 2>&1"
 
 	execute(false, run_cmd)
       end
 
-      def shutdown(env, ui)
-	vm_name = env[:vm_name]
+      def shutdown(ui)
+	vm_name = get_name('vm_name')
 	if state(vm_name) == :not_running
 	  ui.warn "You are trying to shutdown a VM which is not running"
 	else
@@ -236,7 +246,7 @@ module VagrantPlugins
 	    execute(false, "#{@sudo} kill SIGTERM #{bhyve_pid}")
 	    sleep 1
 	    execute(false, "#{@sudo} kill SIGTERM #{bhyve_pid}")
-	  else if loader_pid.length != 0
+	  elsif loader_pid.length != 0
 	    ui.warn "Guest is going to be exit in bootloader stage"
 	    execute(false, "#{@sudo} kill #{loader_pid}")
 	    execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1")
@@ -246,20 +256,22 @@ module VagrantPlugins
 	end
       end
 
-      def port_forward(forward_information, pf_conf, tap_device)
-	pf_file = File.open(pf_conf, 'a')
-	ip_address = get_ip_address(tap_device)
-	tcp = "pass in on t10 proto tcp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
-	udp = "pass in on t10 proto udp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
-	pf_file.puts tcp
-	pf_file.puts udp
+      def forward_port(forward_information, pf_conf, tap_device)
+	ip_address	= get_ip_address(tap_device)
+	tcp 		= "pass in on #{forward_information[:adapter]} proto tcp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
+	udp		= "pass in on #{forward_information[:adapter]} proto udp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
+	
+	pf_conf.open('a') do |pf_file|
+	  pf_file.puts tcp
+	  pf_file.puts udp
+	end
 	restart_service("pf")
       end
 
-      def cleanup(machine)
-	switch		= machine.env[:switch]
-	tap		= machine.env[:tap]
-	directory	= machine.box.directory
+      def cleanup
+	switch		= get_name('bridge')
+	tap		= get_name('tap')
+	directory	= @data_dir
 
 	# Destory network interfaces
 	execute(false, "#{@sudo} ifconfg #{switch} destroy") if switch.length != 0
@@ -280,7 +292,7 @@ module VagrantPlugins
 	when running?(vm_name)
 	  :running
 	else
-	:not_running
+	  :not_running
 	end
       end
 
@@ -317,6 +329,13 @@ module VagrantPlugins
 	  nmdm_num += 1
 	end
 	nmdm_num
+      end
+      
+      def get_name(attr)
+	name_file = @data_dir.join(attr)
+	if File.exist?(name_file)
+	  name_file.open('r') { |f| f.readline }
+	end
       end
 
     end

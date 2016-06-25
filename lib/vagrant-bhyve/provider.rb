@@ -109,7 +109,8 @@ module VagrantPlugins
         state_id = :not_created if !@machine.id
 	
         # Query the driver for the current state of the machine
-        state_id = @driver.state(@machine.env[:vm_name]) if @machine.id && !state_id
+	vm_name = driver.get_name('vm_name')
+        state_id = driver.state(vm_name) if @machine.id && !state_id
         state_id = :unknown if !state_id
 
         # Get the short and long description

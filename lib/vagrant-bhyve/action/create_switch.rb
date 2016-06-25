@@ -14,11 +14,12 @@ module VagrantPlugins
 	  @machine 	= env[:machine]
 	  @ui		= env[:ui]
 	  @driver	= @machine.provider.driver
+	  
 	  switch_list 	= %w(vagrant_bhyve_default_switch)
 	  # The switch name is used as created bridge device's description
-	  for switch in switch_list
-	    @driver.create_network_device(switch, "bridge", @machine.env)
-	    @driver.enable_nat(switch, @machine, @ui)
+	  switch_list.each do |switch|
+	    @driver.create_network_device(switch, "bridge")
+	    @driver.enable_nat(switch, @ui)
 	  end
 	  @app.call(env)
 	end

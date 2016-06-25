@@ -18,7 +18,7 @@ module VagrantPlugins
 
 	  @ui.info I18n.t("vagrant.action.vm.clone.creating")
           @machine.id 	= SecureRandom.uuid
-	  @driver.import(@machine)
+	  @driver.import(@machine.id)
 	  @app.call(env)
 	end
 

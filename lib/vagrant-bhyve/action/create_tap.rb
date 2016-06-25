@@ -13,11 +13,13 @@ module VagrantPlugins
 	def call(env)
 	  @machine	= env[:machine]
 	  @driver	= @machine.provider.driver
-	  tap_name	= "vagrant_bhyve_#{@machine.env[:vm_name]}"
+
+	  vm_name	= @driver.get_vm_name
+	  tap_name	= "vagrant_bhyve_#{vm_name}"
 	  tap_list 	= [tap_name]
 	  # The switch name is used as created bridge device's description
-	  for tap in tap_list
-	    @driver.create_network_device(tap, "tap", @machine.env)
+	  tap_list.each do |tap|
+	    @driver.create_network_device(tap, "tap")
 	  end
 	  @app.call(env)
 	end
