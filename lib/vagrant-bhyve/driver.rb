@@ -172,9 +172,10 @@ module VagrantPlugins
 	directory	= machine.box.directory
 	config		= machine.provider_config
 
-	run_cmd = @sudo
+	# Run in bhyve in background
+	run_cmd = "sudo -b"
 	# Prevent virtual CPU use 100% of host CPU
-	run_cmd += " bhyve -H -P"
+	run_cmd += " bhyve -HP"
 
 	# Configure for hostbridge & lpc device, Windows need slot 0 and 31
 	# while others don't care, so we use slot 0 and 31
@@ -197,14 +198,14 @@ module VagrantPlugins
 	# Enable graphics if the box is configed so
 
 	# Allocate resources
-	run_cmd += " -c #{config.cpu}"
+	run_cmd += " -c #{config.cpus}"
 	run_cmd += " -m #{config.memory}"
 
 	# Disk 
-	run_cmd += " -s 1, ahci-hd,#{directory.join("disk.img").to_s}"
+	run_cmd += " -s 1,ahci-hd,#{directory.join("disk.img").to_s}"
 
 	# Tap device
-	run_cmd += " -s 2, virtio-net,#{machine.env[:tap]}"
+	run_cmd += " -s 2,virtio-net,#{machine.env[:tap]}"
 
 	# Console
 	nmdm_num = find_available_nmdm
@@ -212,7 +213,7 @@ module VagrantPlugins
 	run_cmd += " -l com1,/dev/nmdm#{nmdm_num}A}"
 
 	vm_name = machine.env[:vm_name]
-	run_cmd += " #{vm_name}"
+	run_cmd += " #{vm_name} >/dev/null 2>&1"
 
 	execute(false, run_cmd)
       end

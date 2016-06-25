@@ -39,7 +39,7 @@ Available configurations for the provider are:
 * `memory`: amount of memory, e.g. `512M`
 * `cpus`: number of CPUs, e.g. `1`
 
-Here is steps needed to create a test box. Note `vagrant` here means vagrant binary installed by `vagrant-bhyve`, whose location is in `bin/`
+Here is steps needed to create a test box.
 
 1. Create a `Vagrantfile` with the following contents:
 
@@ -66,11 +66,11 @@ Here is steps needed to create a test box. Note `vagrant` here means vagrant bin
 
 3. Download [FreeBSD-10.3-RELEASE-amd64.raw.xz](http://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/10.3-RELEASE/amd64/Latest/FreeBSD-10.3-RELEASE-amd64.raw.xz) and extract it to the same directory with Vagrantfile and metadata.json. Rename the img file into `disk.img`
 4. Run `tar cvzf test.box *` to create a box.
-5. `bin/vagrant box add test.box`
+5. `bundle exec vagrant box add test.box`
 
 ### Running the box
 
-After a box is created, you can now start Bhyve VM with a standard Vagrantfile and `vagrant up`.
+After a box is created, you can now start Bhyve VM with a standard Vagrantfile and `bundle exec vagrant up`.
 
 ```ruby
 Vagrant.configure("2") do |config|

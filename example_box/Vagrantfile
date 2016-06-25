@@ -1,0 +1,11 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "test"
+
+  config.vm.provider :bhyve do |vm|
+    vm.memory = "512M"
+    vm.cpus = "1"
+  end
+end

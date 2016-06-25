@@ -6,7 +6,7 @@ To turn this into a box create a vagrant image according documentation (don't
     forget to install rsync command) and create box with following command:
 
 ```
-$ tar cvzf custom_box.box ./metadata.json ./Vagrantfile ./box.img
+$ tar cvzf test.box ./metadata.json ./Vagrantfile ./disk.img
 ```
 
 This box works by using Vagrant's built-in Vagrantfile merging to setup

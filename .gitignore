@@ -9,3 +9,5 @@
 /tmp/
 /svn-commit.tmp
 /vendor/
+/example_box/*img
+/example_box/*raw
