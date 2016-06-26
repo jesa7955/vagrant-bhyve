@@ -15,6 +15,7 @@ module VagrantPlugins
 	  @ui		= env[:ui]
 	  @driver	= @machine.provider.driver
 	  
+	  @ui.info('vagrant_bhyve.setup_nat_environment')
 	  switch_list 	= %w(vagrant_bhyve_default_switch)
 	  # The switch name is used as created bridge device's description
 	  switch_list.each do |switch|

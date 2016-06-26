@@ -1,1 +1,31 @@
 en:
+  vagrant_bhyve:
+    states:
+      short_not_created: |-
+        environment_not_created
+      long_not_created: |-
+        The environment has not been created yet. Run `vagrant up` to create
+        the environment
+
+    errors:
+      system_version_too_low: |-
+        To use bhyve your FreeBSD's version should be newer then 10.0
+      missing_popcnt: |-    
+        Popcnt is not supported by your CPU.
+      missing_ept: |-
+        EPT is not supported by your CPU.
+      missing_iommu: |-
+        IOMMU is not supported by your CPU.
+      has_no_root_privilege: |-
+        You need root privilege to manage bhyve VMs.
+      execute_error: |-
+      unable_to_load_module: |-
+        Failed to load kernel modules we need to run bhyve VMs and provide 
+        them networking.
+      unable_to_create_brighe: |-
+        Failed to create bridge device.
+      grub_bhyve_not_installed: |-
+        Grub2-bhyve is not found on you system. You can install with `pkg 
+        install grub2-bhyve` or install through port(sysutils/grub2-bhyve)
+      restart_service_failed: |-
+        Failed to restart a service on your system.

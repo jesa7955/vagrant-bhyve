@@ -6,21 +6,12 @@ TODO: Delete this and the text above, and describe your gem
 
 ## Installation
 
-Add this line to your application's Gemfile:
 
-```ruby
-gem 'vagrant-bhyve'
-```
+## Usage(Test)
 
-And then execute:
+### Setup environment
 
-    $ bundle
-
-Or install it yourself as:
-
-    $ gem install vagrant-bhyve
-
-## Usage
+    $ bundle install (you can add --path vendor/bundle)
 
 ### Creating a box
 
@@ -65,8 +56,8 @@ Here is steps needed to create a test box.
     }
     ```
 
-3. Download [FreeBSD-10.3-RELEASE-amd64.raw.xz](http://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/10.3-RELEASE/amd64/Latest/FreeBSD-10.3-RELEASE-amd64.raw.xz) and extract it to the same directory with Vagrantfile and metadata.json. Rename the img file into `disk.img`
-4. Run `tar cvzf test.box *` to create a box.
+3. Follow the instructions on [FreeBSD HandBook](https://www.freebsd.org/doc/handbook/virtualization-host-bhyve.html) to create FreeBSD VM image. Note to name the image to `disk.img`
+4. Run `tar cvzf test.box ./Vagrantfil ./meta.json ./disk.img` to create a box.
 5. `bundle exec vagrant box add test.box`
 
 ### Running the box
@@ -93,4 +84,4 @@ Bug reports and pull requests are welcome on GitHub at https://github.com/jesa79
 
 ## License
 
-BSD
+MIT

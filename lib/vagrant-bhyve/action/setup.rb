@@ -11,12 +11,9 @@ module VagrantPlugins
 	end
 
 	def call(env)
-	  @machine 	= env[:machine]
-	  @driver	= @machine.provider.driver
-	  # Add vm_name into data_dir
-	  @machine.data_dir.join('vm_name').open('w') do |name_file|
-	    name_file.write @machine.box.name.gsub('/', '_')
-	  end
+	  @driver	= env[:machine].provider.driver
+
+	  env[:ui].info I18n.t('vagrant_bhyve.setup_environment')
 	  @driver.check_bhyve_support
 	  module_list 	= %w(vmm nmdm if_bridge if_tap)
 	  for kernel_module in module_list

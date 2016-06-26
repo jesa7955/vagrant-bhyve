@@ -12,3 +12,5 @@
 /example_box/*img
 /example_box/*raw
 /bin/
+/Vagrantfile
+/.vagrant

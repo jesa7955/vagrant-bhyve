@@ -12,15 +12,16 @@ module VagrantPlugins
 
 	def call(env)
 	  @machine 	= env[:machine]
-	  @driver	= machine.provider.driver
-	  firmware	= machine.box.metadata[:firmware]
-	  loader	= machine.box.metadata[:loader]
-          @ui.info I18n.t('vagrant.actions.vm.boot.booting')
-          @ui.detail I18n.t('vagrant_bhyve.actions.vm.load.loading')
-	  @driver.load(loader, machine) if firmware == 'bios'
+	  @driver	= @machine.provider.driver
+	  firmware	= @machine.box.metadata['firmware']
+	  loader	= @machine.box.metadata['loader']
+
+          env[:ui].info I18n.t('vagrant_bhyve.load_os_kernel')
+	  @driver.load(loader, @machine, @ui) if firmware == 'bios'
+
 	  @app.call(env)
 	end
-
+	
       end
     end
   end

@@ -14,11 +14,10 @@ module VagrantPlugins
 	def call(env)
 	  @machine 	= env[:machine]
 	  @driver	= @machine.provider.driver
-	  @ui		= env[:ui]
 
-	  @ui.info I18n.t("vagrant.action.vm.clone.creating")
+	  env[:ui].info I18n.t("vagrant_bhyve.create_vm")
           @machine.id 	= SecureRandom.uuid
-	  @driver.import(@machine.id)
+	  @driver.import(@machine)
 	  @app.call(env)
 	end
 

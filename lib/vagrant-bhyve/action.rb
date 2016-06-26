@@ -11,6 +11,7 @@ module VagrantPlugins
       autoload :Import, action_root.join('import')
       autoload :CreateSwitch, action_root.join('create_switch')
       autoload :CreateTap, action_root.join('create_tap')
+      autoload :Cleanup, action_root.join('cleanup')
       autoload :Load, action_root.join('load')
       autoload :Boot, action_root.join('boot')
       autoload :ForwardPorts, action_root.join('forward_ports')
@@ -18,7 +19,6 @@ module VagrantPlugins
 
       def self.action_boot
 	Vagrant::Action::Builder.new.tap do |b|
-	  b.use Setup
 	  b.use CreateSwitch
 	  b.use CreateTap
 	  b.use Load
@@ -32,7 +32,6 @@ module VagrantPlugins
 	  b.use ConfigValidate
 	  b.use Call, IsState, :running do |env, b1|
 	    if !env[:result]
-	      ######
 	      next
 	    end
 
@@ -41,7 +40,35 @@ module VagrantPlugins
 		b2.use Shutdown
 	      end
 	    end
-	    #b1.user Cleanup
+	    b1.use Cleanup
+	  end
+	end
+      end
+
+      def self.action_ssh
+	Vagrant::Action::Builder.new.tap do |b|
+	  b.use ConfigValidate
+	  b.use Call, IsState, :running do |env, b1|
+	    if !env[:result]
+	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_running')
+	      next
+	    end
+
+	    b1.use SSHExec
+	  end
+	end
+      end
+
+      def self.action_start
+	Vagrant::Action::Builder.new.tap do |b|
+	  b.use ConfigValidate
+	  b.use Call, IsState, :runnig do |env, b1|
+	    if env[:result]
+	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_already_running')
+	      next
+	    end
+
+	    b1.use action_boot
 	  end
 	end
       end
@@ -57,9 +84,11 @@ module VagrantPlugins
 	  b.use ConfigValidate
 	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env,b1|
 	    if env[:result]
+	      b1.use Setup
 	      b1.use Import
 	    end
 	  end
+	  b.use action_start
 	end
       end
 

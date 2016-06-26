@@ -36,19 +36,11 @@ module VagrantPlugins
       end
 
       class UnableToCreateBridge < VagrantBhyveError
-	error_key(:unable_to_create_brighe)
-      end
-
-      class UnrecognizedLoader < VagrantBhyveError
-	error_key(:unrecognized_loader)
+	error_key(:unable_to_create_bridge)
       end
 
       class GrubBhyveNotinstalled < VagrantBhyveError
 	error_key(:grub_bhyve_not_installed)
-      end
-
-      class NerworkInterfaceNotCreated < VagrantBhyveError
-	error_key(:switch_not_created)
       end
 
       class RestartServiceFailed < VagrantBhyveError

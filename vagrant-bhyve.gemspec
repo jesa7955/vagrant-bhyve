@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.summary       = %q{Vagrant provider plugin to support bhyve}
   spec.description   = spec.summary
   spec.homepage      = "https://github.com/jesa7955/vagrant-bhyve"
-  spec.license       = "BSD"
+  spec.license       = "MIT"
 
   # Prevent pushing this gem to RubyGems.org by setting 'allowed_push_host', or
   # delete this section to allow pushing this gem to any host.

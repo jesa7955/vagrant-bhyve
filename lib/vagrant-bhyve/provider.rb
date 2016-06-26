@@ -33,7 +33,8 @@ module VagrantPlugins
       def ssh_info
 	return nil if state.id != :running
 
-	ip = driver.get_ipaddress(@machine)
+	tap_device = driver.get_attr('tap')
+	ip = driver.get_ip_address(tap_device) unless tap_device == ''
 
 	# We just return nil if were not able to identify the VM's IP and
 	# let Vagrant core deal with it like docker provider does
@@ -108,8 +109,10 @@ module VagrantPlugins
         state_id = nil
         state_id = :not_created if !@machine.id
 	
+	# Use the box's name as vm_name and store it
+	vm_name  = @machine.box.name.gsub('/', '_')
+	driver.store_attr('vm_name', vm_name)
         # Query the driver for the current state of the machine
-	vm_name = driver.get_name('vm_name')
         state_id = driver.state(vm_name) if @machine.id && !state_id
         state_id = :unknown if !state_id
 

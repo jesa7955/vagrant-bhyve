@@ -14,7 +14,8 @@ module VagrantPlugins
 	  @machine	= env[:machine]
 	  @driver	= @machine.provider.driver
 
-	  vm_name	= @driver.get_vm_name
+	  env[:ui].info('vagrant_bhyve.create_tap_device')
+	  vm_name	= @driver.get_attr('vm_name')
 	  tap_name	= "vagrant_bhyve_#{vm_name}"
 	  tap_list 	= [tap_name]
 	  # The switch name is used as created bridge device's description
