@@ -1,5 +1,6 @@
 require "log4r"
 require "fileutils"
+require "digest/md5"
 
 
 module VagrantPlugins
@@ -75,10 +76,16 @@ module VagrantPlugins
 
 	# Configure tap device
 	if device_name == 'tap'
+	  # Generate a mac address for this tap device from its vm_name
+	  vm_name = get_attr('vm_name')
+	  mac = Digest::MD5.hexdigest(vm_name).scan(/../).select.with_index{ |_, i| i.even? }[0..5].join(':')
+	  store_attr("#{interface_name}_mac", mac)
+	  # Add the tap device as switch's member
 	  switch = get_attr('bridge') 
+	  # Make sure the tap deivce has the same mtu value
+	  # with the switch
 	  mtu = execute(false, "ifconfig #{switch} | head -n1 | awk '{print $NF}'")
 	  execute(false, "ifconfig #{interface_name} mtu #{mtu}") if mtu and mtu != '1500'
-	  # Add tap device into switch member
 	  execute(false, "ifconfig #{switch} addm #{interface_name}")
 	end
       end
@@ -145,10 +152,12 @@ module VagrantPlugins
       end
 
       def get_ip_address(interface_name)
-	interface_info = execute(false, "ifconfig", interface_name)
-	low = interface_info =~ /inet/
-	up = interface_info =~ /netmask/
-	ip = interface_info[low..up].split[1]
+	mac = get_attr("#{interface_name}_mac")
+	# dnsmasq store its leases info in /var/lib/misc/dnsmasq.leases
+	leases_info = Pathname.new('/var/lib/misc/dnsmasq.leases').open('r'){|f| f.readlines}.select{|line| line.match(mac)}
+	raise Errors::NotFoundLeasesInfo if leases_info == []
+	# IP address for a device is on third coloum
+	ip = leases_info[0].split[2]
       end
 
       def load(loader, machine, ui)
@@ -226,8 +235,9 @@ module VagrantPlugins
 	run_cmd += " -s 1,ahci-hd,#{directory.join("disk.img").to_s}"
 
 	# Tap device
-	tap_device = get_attr('tap')
-	run_cmd += " -s 2,virtio-net,#{tap_device}"
+	tap_device  = get_attr('tap')
+	mac_address = get_attr("#{tap_device}_mac")
+	run_cmd += " -s 2,virtio-net,#{tap_device},mac=#{mac_address}"
 
 	# Console
 	nmdm_num = find_available_nmdm
