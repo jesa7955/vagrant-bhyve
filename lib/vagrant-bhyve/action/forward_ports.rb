@@ -14,7 +14,7 @@ module VagrantPlugins
 	  @machine	= env[:machine]
 	  @driver	= @machine.provider.driver
 
-	  env[:ui].info('vagrant_bhyve.forward_ports')
+	  env[:ui].info I18n.t('vagrant_bhyve.action.forward_ports')
 	  pf_conf 	= @machine.box.directory.join('pf.conf')
 	  tap_device 	= @machine.env[:tap]
 	  @env[:forwarded_ports].each do |item|

@@ -11,7 +11,6 @@ module VagrantPlugins
 	end
 
 	def call(env)
-	  env[:ui].info('vagrant_bhyve.cleanup')
 	  env[:machine].provider.driver.cleanup
 
 	  @app.call(env)

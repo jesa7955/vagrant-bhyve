@@ -15,7 +15,6 @@ module VagrantPlugins
 	  @machine 	= env[:machine]
 	  @driver	= @machine.provider.driver
 
-	  env[:ui].info I18n.t("vagrant_bhyve.create_vm")
           @machine.id 	= SecureRandom.uuid
 	  @driver.import(@machine)
 	  @app.call(env)

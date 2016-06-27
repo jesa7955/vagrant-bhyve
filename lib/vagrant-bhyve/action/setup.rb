@@ -13,7 +13,7 @@ module VagrantPlugins
 	def call(env)
 	  @driver	= env[:machine].provider.driver
 
-	  env[:ui].info I18n.t('vagrant_bhyve.setup_environment')
+	  env[:ui].info I18n.t('vagrant_bhyve.action.setup_environment')
 	  @driver.check_bhyve_support
 	  module_list 	= %w(vmm nmdm if_bridge if_tap)
 	  for kernel_module in module_list

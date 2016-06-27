@@ -14,7 +14,7 @@ module VagrantPlugins
 	  @machine	= env[:machine]
 	  @driver	= @machine.provider.driver
 
-	  env[:ui].info('vagrant_bhyve.create_tap_device')
+	  env[:ui].detail I18n.t('vagrant_bhyve.action.vm.boot.create_tap_device')
 	  vm_name	= @driver.get_attr('vm_name')
 	  tap_name	= "vagrant_bhyve_#{vm_name}"
 	  tap_list 	= [tap_name]
