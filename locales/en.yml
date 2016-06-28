@@ -3,23 +3,23 @@ en:
     action:
       vm:
         setup_environment: |-
-          Checking if your system supports bhyve and loading kernel modules we 
-          need to creat VMs use bhyve. You will be asked for password for sudo
-          if you are running vagrant with root user.
+          Checking if your system supports bhyve and loading kernel modules
+          we need to creat VMs use bhyve. You will be asked for password for
+          sudo if you are not running vagrant with root user.
         boot:
           setup_nat: |-
-            Setting up a nat environment using pf and dnsmasq to provide network
-            for VMs. You will dnsmasq installed on your system. Note that your 
-            /etc/pf.conf will be modified.
+            Setting up a nat environment using pf and dnsmasq to provide 
+            network for VMs. You will dnsmasq installed on your system. 
+            Note that your /etc/pf.conf will be modified.
           create_tap: |-
             Creating tap device for VM to use.
           load_kernel: |-
             Loading guest OS's kernel into memory.
           booting: |-
             Booting VM with bhyve.
-      halt:
-        shutting_down: |-
-          Trying to shutdown your VM gently.
+        halt:
+          shutting_down: |- 
+            Trying to shutdown your VM gentally.
 
     states:
       short_not_created: |-

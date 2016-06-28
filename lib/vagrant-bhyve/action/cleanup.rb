@@ -3,7 +3,7 @@ require "log4r"
 module VagrantPlugins
   module ProviderBhyve
     module Action
-      class CleanUP
+      class Cleanup
 
 	def initialize(app, env)
 	  @logger = Log4r::Logger.new("vagrant_bhyve::action::cleanup")

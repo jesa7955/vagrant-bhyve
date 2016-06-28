@@ -15,7 +15,7 @@ module VagrantPlugins
       autoload :Load, action_root.join('load')
       autoload :Boot, action_root.join('boot')
       autoload :ForwardPorts, action_root.join('forward_ports')
-      autoload :Shutdown, action_root.join('shudown')
+      autoload :Shutdown, action_root.join('shutdown')
 
       def self.action_boot
 	Vagrant::Action::Builder.new.tap do |b|

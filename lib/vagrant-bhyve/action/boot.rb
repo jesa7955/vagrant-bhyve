@@ -12,10 +12,9 @@ module VagrantPlugins
 
 	def call(env)
 	  @machine 	= env[:machine]
-	  @ui		= env[:ui]
 	  @driver	= @machine.provider.driver
 
-          @ui.detail I18n.t('vagrant_bhyve.actions.vm.boot.booting')
+          env[:ui].detail I18n.t('vagrant_bhyve.action.vm.boot.booting')
 	  @driver.boot(@machine)
 
 	  @app.call(env)

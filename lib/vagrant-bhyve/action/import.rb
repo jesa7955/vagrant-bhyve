@@ -1,5 +1,6 @@
 require "log4r"
 require "securerandom"
+require "digest/md5"
 
 module VagrantPlugins
   module ProviderBhyve

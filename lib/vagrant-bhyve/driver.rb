@@ -62,11 +62,8 @@ module VagrantPlugins
 	return if device_name.length == 0
 
 	# Check whether the switch has been created
-	switch_iden = get_interface_name(device_name)
-	return if switch_iden.length != 0
-
-	# Create new virtual device
-	interface_name = execute(false, "#{@sudo} ifconfig #{device_type} create")
+	interface_name = get_interface_name(device_name)
+	interface_name = execute(false, "#{@sudo} ifconfig #{device_type} create") if interface_name.length == 0
 	raise Errors::UnableToCreateBridge if interface_name.length == 0
 	# Add new created device's description
 	execute(false, "#{@sudo} ifconfig #{interface_name} description #{device_name} up")
@@ -75,18 +72,14 @@ module VagrantPlugins
 	store_attr(device_type, interface_name)
 
 	# Configure tap device
-	if device_name == 'tap'
-	  # Generate a mac address for this tap device from its vm_name
-	  vm_name = get_attr('vm_name')
-	  mac = Digest::MD5.hexdigest(vm_name).scan(/../).select.with_index{ |_, i| i.even? }[0..5].join(':')
-	  store_attr("#{interface_name}_mac", mac)
+	if device_type == 'tap'
 	  # Add the tap device as switch's member
 	  switch = get_attr('bridge') 
 	  # Make sure the tap deivce has the same mtu value
 	  # with the switch
 	  mtu = execute(false, "ifconfig #{switch} | head -n1 | awk '{print $NF}'")
-	  execute(false, "ifconfig #{interface_name} mtu #{mtu}") if mtu and mtu != '1500'
-	  execute(false, "ifconfig #{switch} addm #{interface_name}")
+	  execute(false, "#{@sudo} ifconfig #{interface_name} mtu #{mtu}") if mtu.length != 0 and mtu != '1500'
+	  execute(false, "#{@sudo} ifconfig #{switch} addm #{interface_name}")
 	end
       end
 
@@ -100,13 +93,13 @@ module VagrantPlugins
 	sub_net = "172.16." + bridge_num
 
 	# Config IP for the switch
-	execute(false, "ifconfig #{bridge_name} #{sub_net}.1/24")
+	execute(false, "#{@sudo} ifconfig #{bridge_name} #{sub_net}.1/24")
 
 	# Get default gateway
 	gateway = execute(false, "netstat -4rn | grep default | awk '{print $4}")
 	store_attr('gateway', gateway)
 	# Add gateway as a bridge member
-	execute(false, "ifconfig #{bridge_name} addm #{gateway}")
+	execute(false, "#{@sudo} ifconfig #{bridge_name} addm #{gateway}")
 	
 	# Enable forwarding
 	execute(false, "#{@sudo} sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1")
@@ -118,7 +111,7 @@ module VagrantPlugins
 	  pf_file.puts "nat on #{gateway} from {#{sub_net}.0/24} to any ->(#{gateway})"
 	end
 	# We have to use shell utility to add this part to /etc/pf.conf for now
-	ui.warn "We are going change your /etc/pf.conf to enable nat for VMs"
+	ui.warn "We are going modify your /etc/pf.conf to enable nat for VMs"
 	sleep 3
 	execute(false, "echo '# Include pf configure file to enable NAT for vagrant-bhyve' | #{@sudo} tee -a /etc/pf.conf")
 	execute(false, "echo include \\\"#{pf_conf}\\\" | #{@sudo} tee -a /etc/pf.conf")
@@ -144,7 +137,10 @@ module VagrantPlugins
 	    dnsmasq_file.puts "interface=#{bridge_name}"
 	    dnsmasq_file.puts "dhcp-range=#{sub_net + ".10," + sub_net + ".254"}"
 	  end
-	  #execute(false, "#{@sudo} dnsmasq -C #{dnsmasq_conf.to_s}")
+	  leases_file = @data_dir.join("#{bridge_name}.leases").to_s
+	  dnsmasq_cmd = "dnsmasq -C #{dnsmasq_conf.to_s} -l #{leases_file} -x /var/run/#{bridge_name}_dnsmasq.pid"
+	  store_attr('dnsmasq', "#{@sudo} #{dnsmasq_cmd}") if execute(false, "pgrep -fx #{dnsmasq_cmd}").length != 0
+	  execute(false, dnsmasq_cmd)
 	else
 	  ui.warn "dnsmasq is not installed on your system, you may should config guest's ip by hand"
 	end
@@ -152,15 +148,17 @@ module VagrantPlugins
       end
 
       def get_ip_address(interface_name)
-	mac = get_attr("#{interface_name}_mac")
-	# dnsmasq store its leases info in /var/lib/misc/dnsmasq.leases
-	leases_info = Pathname.new('/var/lib/misc/dnsmasq.leases').open('r'){|f| f.readlines}.select{|line| line.match(mac)}
+	dnsmasq_cmd = get_attr('dnsmasq')
+	return if execute(false, "pgrep -fx #{dnsmasq_cmd}").length == 0
+	mac = get_mac_address
+	bridge_name = get_attr('switch')
+	leases_info = @data_dir.join("#{bridge_name}.leases").open('r'){|f| f.readlines}.select{|line| line.match(mac)}
 	raise Errors::NotFoundLeasesInfo if leases_info == []
 	# IP address for a device is on third coloum
 	ip = leases_info[0].split[2]
       end
 
-      def load(loader, machine, ui)
+      def load(loader, machine)
 	run_cmd = @sudo
 	case loader
 	when 'bhyveload'
@@ -236,7 +234,7 @@ module VagrantPlugins
 
 	# Tap device
 	tap_device  = get_attr('tap')
-	mac_address = get_attr("#{tap_device}_mac")
+	mac_address = get_mac_address
 	run_cmd += " -s 2,virtio-net,#{tap_device},mac=#{mac_address}"
 
 	# Console
@@ -260,16 +258,17 @@ module VagrantPlugins
 	  if bhyve_pid.length != 0
 	    # We need to kill bhyve process twice and wait some time to make
 	    # sure VM is shuted down.
-	    execute(false, "#{@sudo} kill SIGTERM #{bhyve_pid}")
-	    sleep 3
-	    execute(false, "#{@sudo} kill SIGTERM #{bhyve_pid}")
+	    while bhyve_pid.length != 0
+	      execute(false, "#{@sudo} kill -s TERM #{bhyve_pid}")
+	      bhyve_pid = execute(false, "pgrep -fx 'bhyve: #{vm_name}'")
+	    end
 	  elsif loader_pid.length != 0
 	    ui.warn "Guest is going to be exit in bootloader stage"
 	    execute(false, "#{@sudo} kill #{loader_pid}")
-	    execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1")
 	  else
 	    ui.warn "Unable to locate process id for #{vm_name}"
 	  end
+	  execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1")
 	end
       end
 
@@ -290,16 +289,20 @@ module VagrantPlugins
 	tap		= get_attr('tap')
 	directory	= @data_dir
 
+	# Kill dnsmasq
+	dnsmasq_cmd = get_attr('dnsmasq')
+	execute(false, "#{@sudo} kill $(pgrep -fx #{dnsmasq_cmd})")
+
 	# Destory network interfaces
-	execute(false, "#{@sudo} ifconfg #{switch} destroy") if switch.length != 0
-	execute(false, "#{@sudo} ifconfg #{tap} destroy") if tap.length != 0
+	execute(false, "#{@sudo} ifconfig #{switch} destroy") if switch.length != 0
+	execute(false, "#{@sudo} ifconfig #{tap} destroy") if tap.length != 0
 
 	# Delete configure files
-	FileUtils.rm directory.join('dnsmasq.conf').to_s
-	FileUtils.rm directory.join('pf.conf').to_s
+	FileUtils.rm directory.join('dnsmasq.conf').to_s if directory.join('dnsmasq.conf').exist?
+	FileUtils.rm directory.join('pf.conf').to_s if directory.join('dnsmasq.conf').exist?
 
 	# Clean /etc/pf.conf
-	execute(false, "sed -I'' '/# Include pf configure file to enable NAT for vagrant-bhyve/ {N;d;}' /etc/pf.conf")
+	execute(false, "#{@sudo} sed -I '' '/# Include pf configure file to enable NAT for vagrant-bhyve/ {N;d;}' /etc/pf.conf")
       end
 
       def state(vm_name)
@@ -319,6 +322,14 @@ module VagrantPlugins
 
       def execute(*cmd, **opts, &block)
 	@executor.execute(*cmd, **opts, &block)
+      end
+
+      def get_mac_address
+	# Generate a mac address for this tap device from its vm_name
+	vm_name = get_attr('vm_name')
+	# IEEE Standards OUI for bhyve
+	mac = "58:9c:fc:0"
+	mac += Digest::MD5.hexdigest(vm_name).scan(/../).select.with_index{ |_, i| i.even? }[0..2].join(':')[1..-1]
       end
 
       # Get the interface name for a switch(like 'bridge0')

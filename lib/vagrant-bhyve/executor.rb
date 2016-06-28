@@ -26,7 +26,7 @@ module VagrantPlugins
 	  result.stderr.gsub!("\r\n", "\n")
 	  result.stdout.gsub!("\r\n", "\n")
 
-	  if result.exit_code != 0 && interrupted
+	  if result.exit_code != 0 || interrupted
 	    raise Errors::ExecuteError,
 	      command: cmd.inspect,
 	      stderr: result.stderr,
