@@ -1,17 +1,17 @@
-# VagrantPlugin::ProviderBhyve
+# vagrant-bhyve
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/vagrant/bhyve`. To experiment with that code, run `bin/console` for an interactive prompt.
-
-TODO: Delete this and the text above, and describe your gem
+This is a Vagrant plugin which enable FreeBSD's hypervisor bhyve as its backend.
 
 ## Installation
 
-
 ## Usage(Test)
+
+## Development
 
 ### Setup environment
 
-    $ bundle install (you can add --path vendor/bundle)
+    $ git clone https://github.com/jesa7955/vagrant-bhyve.git
+    $ bundle install --path vendor/bundle
 
 ### Creating a box
 
@@ -56,13 +56,16 @@ Here is steps needed to create a test box.
     }
     ```
 
-3. Follow the instructions on [FreeBSD HandBook](https://www.freebsd.org/doc/handbook/virtualization-host-bhyve.html) to create FreeBSD VM image. Note to name the image to `disk.img`
+3. Follow the instructions on [FreeBSD HandBook](https://www.freebsd.org/doc/handbook/virtualization-host-bhyve.html) to create FreeBSD VM image. Note to name the image to `disk.img` and remember to add a user named `vagrant` in the VM.
 4. Run `tar cvzf test.box ./Vagrantfil ./meta.json ./disk.img` to create a box.
-5. `bundle exec vagrant box add test.box`
+
+### Adding the box
+
+    $ bundle exec vagrant box add test.box
 
 ### Running the box
 
-After a box is created, you can now start Bhyve VM with a standard Vagrantfile and `bundle exec vagrant up`.
+After a box is created, you should create another Vagrantfile in the root directory of this project(path/to/vagrant-bhyve)
 
 ```ruby
 Vagrant.configure("2") do |config|
@@ -70,12 +73,22 @@ Vagrant.configure("2") do |config|
 end
 ```
 
+then execute this command to start the box with bhyve
 
-## Development
+    $ bundle exec vagrant up --provider=bhyve
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+### SSH inito the box
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and tags, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+After the box is booted(uped), you can ssh into by executing this command. Note that you will have to use password to authorize for now.
+
+    $ bundle exec vagrant ssh
+
+### Shutdown the box and cleanup
+
+This command will shutdown the booted VM and clean up environment
+
+    $ bundle exec vagrant halt
+
 
 ## Contributing
 
