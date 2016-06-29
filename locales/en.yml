@@ -40,6 +40,7 @@ en:
       has_no_root_privilege: |-
         You need root privilege to manage bhyve VMs.
       execute_error: |-
+        Failed when execute commands
       unable_to_load_module: |-
         Failed to load kernel modules we need to run bhyve VMs and provide 
         them networking.

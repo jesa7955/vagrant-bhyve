@@ -23,7 +23,7 @@ module VagrantPlugins
 	  b.use CreateTap
 	  b.use Load
 	  b.use Boot
-	  b.use WaitForCommunicator, [:running]
+#	  b.use WaitForCommunicator, [:running]
 	end
       end
 

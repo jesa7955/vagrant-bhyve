@@ -31,20 +31,16 @@ module VagrantPlugins
       # 	 private_key_path: "/path/to/my/key"
       # 	}
       def ssh_info
-	return nil if state.id != :running
-
-	tap_device = driver.get_attr('tap')
-	ip = driver.get_ip_address(tap_device) unless tap_device == ''
-
 	# We just return nil if were not able to identify the VM's IP and
 	# let Vagrant core deal with it like docker provider does
+	return nil if state.id != :running
+	tap_device	= driver.get_attr('tap')
+	ip		= driver.get_ip_address(tap_device) unless tap_device.length == 0
 	return nil if !ip
-
 	ssh_info = {
 	  host: ip,
-	  port: @machine.config.ssh.guest_port
+	  port: 22,
 	}
-	ssh_info
       end
 
       # This is called early, before a machine is instantiated, to check
@@ -106,25 +102,20 @@ module VagrantPlugins
       #
       # @return [MachineState]
       def state
-        state_id = nil
-        state_id = :not_created if !@machine.id
-	
-	# Use the box's name as vm_name and store it
 	vm_name  = @machine.box.name.gsub('/', '_')
 	driver.store_attr('vm_name', vm_name)
-        # Query the driver for the current state of the machine
-        state_id = driver.state(vm_name) if @machine.id && !state_id
-        state_id = :unknown if !state_id
-
+	state_id = nil
+	state_id = :not_created if !@machine.id
+	# Query the driver for the current state of the machine
+	state_id = @driver.state(vm_name) if @machine.id && !state_id
+	state_id = :unknown if !state_id
         # Get the short and long description
         short = state_id.to_s.gsub("_", " ")
         long  = I18n.t("vagrant_bhyve.states.#{state_id}")
-
         # If we're not created, then specify the special ID flag
         if state_id == :not_created
           state_id = Vagrant::MachineState::NOT_CREATED_ID
         end
-
         # Return the MachineState object
         Vagrant::MachineState.new(state_id, short, long)
       end

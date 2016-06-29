@@ -28,7 +28,6 @@ module VagrantPlugins
       end
 
       def import(machine)
-	# Store machine id
 	store_attr('id', machine.id)
       end
 
@@ -96,7 +95,7 @@ module VagrantPlugins
 	execute(false, "#{@sudo} ifconfig #{bridge_name} #{sub_net}.1/24")
 
 	# Get default gateway
-	gateway = execute(false, "netstat -4rn | grep default | awk '{print $4}")
+	gateway = execute(false, "netstat -4rn | grep default | awk '{print $4}'")
 	store_attr('gateway', gateway)
 	# Add gateway as a bridge member
 	execute(false, "#{@sudo} ifconfig #{bridge_name} addm #{gateway}")
@@ -120,38 +119,38 @@ module VagrantPlugins
 	# Create a basic dnsmasq setting
 	# Basic settings
 	dnsmasq = execute(false, 'which dnsmasq')
-	if dnsmasq.length != 0
-	  dnsmasq_conf = directory.join("dnsmasq.conf")
-	  dnsmasq_conf.open("w") do |dnsmasq_file|
-	    dnsmasq_file.puts <<-EOF
-	    #vagrant-bhyve dhcp
-	    port=0
-	    domain-needed
-	    no-resolv
-	    except-interface=lo0
-	    bind-interfaces
-	    local-service
-	    dhcp-authoritative
-	    EOF
-	    # DHCP part
-	    dnsmasq_file.puts "interface=#{bridge_name}"
-	    dnsmasq_file.puts "dhcp-range=#{sub_net + ".10," + sub_net + ".254"}"
-	  end
-	  leases_file = @data_dir.join("#{bridge_name}.leases").to_s
-	  dnsmasq_cmd = "dnsmasq -C #{dnsmasq_conf.to_s} -l #{leases_file} -x /var/run/#{bridge_name}_dnsmasq.pid"
-	  store_attr('dnsmasq', "#{@sudo} #{dnsmasq_cmd}") if execute(false, "pgrep -fx #{dnsmasq_cmd}").length != 0
-	  execute(false, dnsmasq_cmd)
-	else
-	  ui.warn "dnsmasq is not installed on your system, you may should config guest's ip by hand"
+	if dnsmasq.length == 0
+	  ui.warn "dnsmasq is not installed on your system, installing using pkg, please confirm"
+	  execute(false, "#{@sudo} pkg install dnsmasq")
 	end
+	dnsmasq_conf = directory.join("dnsmasq.conf")
+	dnsmasq_conf.open("w") do |dnsmasq_file|
+	  dnsmasq_file.puts <<-EOF
+	  #vagrant-bhyve dhcp
+	  port=0
+	  domain-needed
+	  no-resolv
+	  except-interface=lo0
+	  bind-interfaces
+	  local-service
+	  dhcp-authoritative
+	  EOF
+	  # DHCP part
+	  dnsmasq_file.puts "interface=#{bridge_name}"
+	  dnsmasq_file.puts "dhcp-range=#{sub_net + ".10," + sub_net + ".254"}"
+	end
+	leases_file = @data_dir.join("#{bridge_name}.leases").to_s
+	dnsmasq_cmd = "dnsmasq -C #{dnsmasq_conf.to_s} -l #{leases_file} -x /var/run/#{bridge_name}_dnsmasq.pid"
+	store_attr('dnsmasq', dnsmasq_cmd)
+	execute(false, "#{@sudo} #{dnsmasq_cmd}") if execute(false, "pgrep -fx \"#{dnsmasq_cmd}\"").length == 0
 
       end
 
       def get_ip_address(interface_name)
 	dnsmasq_cmd = get_attr('dnsmasq')
-	return if execute(false, "pgrep -fx #{dnsmasq_cmd}").length == 0
+	return if execute(false, "pgrep -fx \"#{dnsmasq_cmd}\"").length == 0
 	mac = get_mac_address
-	bridge_name = get_attr('switch')
+	bridge_name = get_attr('bridge')
 	leases_info = @data_dir.join("#{bridge_name}.leases").open('r'){|f| f.readlines}.select{|line| line.match(mac)}
 	raise Errors::NotFoundLeasesInfo if leases_info == []
 	# IP address for a device is on third coloum
@@ -291,7 +290,7 @@ module VagrantPlugins
 
 	# Kill dnsmasq
 	dnsmasq_cmd = get_attr('dnsmasq')
-	execute(false, "#{@sudo} kill $(pgrep -fx #{dnsmasq_cmd})")
+	execute(false, "#{@sudo} kill -9 $(pgrep -fx \"#{dnsmasq_cmd}\")")
 
 	# Destory network interfaces
 	execute(false, "#{@sudo} ifconfig #{switch} destroy") if switch.length != 0
