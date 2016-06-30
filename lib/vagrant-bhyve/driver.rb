@@ -16,7 +16,7 @@ module VagrantPlugins
 	@machine = machine
 	@data_dir = @machine.data_dir
 	@executor = Executor::Exec.new
-
+	
 	# if vagrant is excecuted by root (or with sudo) then the variable
 	# will be empty string, otherwise it will be 'sudo' to make sure we
 	# can run bhyve, bhyveload and pf with sudo privilege
@@ -28,6 +28,8 @@ module VagrantPlugins
       end
 
       def import(machine)
+	box_dir		= machine.box.directory
+	instance_dir	= @data_dir
 	store_attr('id', machine.id)
       end
 
@@ -45,8 +47,8 @@ module VagrantPlugins
 	raise Errors::MissingEpt unless result =~ /EPT/
 
 	# Check VT-d 
-#	result = execute(false, "#{@sudo} acpidump -t | grep DMAR")
-#	raise Errors::MissingIommu if result.length == 0 
+	#result = execute(false, "#{@sudo} acpidump -t | grep DMAR")
+	#raise Errors::MissingIommu if result.length == 0 
       end
 
       def load_module(module_name)
@@ -85,6 +87,7 @@ module VagrantPlugins
       # For now, only IPv4 is supported
       def enable_nat(switch_name, ui)
 	directory	= @data_dir
+	id		= get_attr('id')
 	bridge_name 	= get_interface_name(switch_name)	
 	# Choose a subnet for this switch
 	index = bridge_name =~ /\d/
@@ -109,12 +112,8 @@ module VagrantPlugins
 	  pf_file.puts "#vagrant-bhyve nat"
 	  pf_file.puts "nat on #{gateway} from {#{sub_net}.0/24} to any ->(#{gateway})"
 	end
-	# We have to use shell utility to add this part to /etc/pf.conf for now
-	ui.warn "We are going modify your /etc/pf.conf to enable nat for VMs"
-	sleep 3
-	execute(false, "echo '# Include pf configure file to enable NAT for vagrant-bhyve' | #{@sudo} tee -a /etc/pf.conf")
-	execute(false, "echo include \\\"#{pf_conf}\\\" | #{@sudo} tee -a /etc/pf.conf")
-	restart_service("pf")
+	# Use pfctl to enable pf rules
+	execute(true, "#{@sudo} pfctl -a vagrant_#{id} -f #{pf_conf.to_s}").to_s
 
 	# Create a basic dnsmasq setting
 	# Basic settings
@@ -126,10 +125,7 @@ module VagrantPlugins
 	dnsmasq_conf = directory.join("dnsmasq.conf")
 	dnsmasq_conf.open("w") do |dnsmasq_file|
 	  dnsmasq_file.puts <<-EOF
-	  #vagrant-bhyve dhcp
-	  port=0
 	  domain-needed
-	  no-resolv
 	  except-interface=lo0
 	  bind-interfaces
 	  local-service
@@ -138,6 +134,7 @@ module VagrantPlugins
 	  # DHCP part
 	  dnsmasq_file.puts "interface=#{bridge_name}"
 	  dnsmasq_file.puts "dhcp-range=#{sub_net + ".10," + sub_net + ".254"}"
+	  dnsmasq_file.puts "dhcp-option=option:dns-server,#{sub_net + ".1"}"
 	end
 	leases_file = @data_dir.join("#{bridge_name}.leases").to_s
 	dnsmasq_cmd = "dnsmasq -C #{dnsmasq_conf.to_s} -l #{leases_file} -x /var/run/#{bridge_name}_dnsmasq.pid"
@@ -271,6 +268,7 @@ module VagrantPlugins
       end
 
       def forward_port(forward_information, pf_conf, tap_device)
+	id		= get_attr('id')
 	ip_address	= get_ip_address(tap_device)
 	tcp 		= "pass in on #{forward_information[:adapter]} proto tcp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
 	udp		= "pass in on #{forward_information[:adapter]} proto udp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
@@ -279,14 +277,21 @@ module VagrantPlugins
 	  pf_file.puts tcp
 	  pf_file.puts udp
 	end
-	restart_service("pf")
+	# Update pf rules
+#	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -f #{pf_conf.to_s}")
+#	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F")
+
       end
 
       def cleanup
 	switch		= get_attr('bridge')
 	tap		= get_attr('tap')
 	vm_name		= get_attr('vm_name')
+	id		= get_attr('id')
 	directory	= @data_dir
+
+	# Clean pf rules
+	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F")
 
 	# Destroy vmm device
   	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1")
