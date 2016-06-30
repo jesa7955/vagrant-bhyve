@@ -11,6 +11,7 @@ module VagrantPlugins
 	end
 
 	def call(env)
+	  env[:ui].info I18n.t('vagrant_bhyve.action.vm.halt.cleaning_up')
 	  env[:machine].provider.driver.cleanup
 
 	  @app.call(env)

@@ -15,7 +15,7 @@ module VagrantPlugins
 	  @ui		= env[:ui]
 	  @driver	= @machine.provider.driver
 
-	  @ui.info('vagrant_bhyve.vm.action.halt.shutting_down')
+	  @ui.info I18n.t('vagrant_bhyve.action.vm.halt.shutting_down')
 	  @driver.shutdown(@ui)
 	  @app.call(env)
 	end

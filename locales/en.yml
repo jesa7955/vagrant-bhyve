@@ -1,5 +1,10 @@
 en:
   vagrant_bhyve:
+    commands:
+      common:
+        vm_not_running: |-
+          You can't invoke this action on top of a VM which is not running.
+
     action:
       vm:
         setup_environment: |-
@@ -19,9 +24,21 @@ en:
             Booting VM with bhyve.
         halt:
           shutting_down: |- 
-            Trying to shutdown your VM gentally.
+            Trying to shutdown your VM through ACPI.
+          force_halt: |-
+            We have to force your VM to halt.
+          cleaning_up: |-
+            Cleaning up your system(e.g. desroy tap device).
 
     states:
+      running: |-
+        Bhyve is running right now.
+      not_running: |-
+        Bhyve is not running right now.
+      uncleaned: |-
+        It seems that the box has been shutdown but there reamains a vmm 
+        device. Maybe you shutdown the box from inside. Run `vagrant halt`
+        to clean.
       short_not_created: |-
         environment_not_created
       long_not_created: |-
