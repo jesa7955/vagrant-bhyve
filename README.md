@@ -13,6 +13,8 @@ This is a Vagrant plugin which enable FreeBSD's hypervisor bhyve as its backend.
     $ git clone https://github.com/jesa7955/vagrant-bhyve.git
     $ bundle install --path vendor/bundle
 
+Note we will need package coreutils and dnsmasq. You can install them now or vagrant-bhyve will try to install them through pkg.
+
 ### Creating a box
 
 Box format is a plain directory consist of `Vagrantfile`, `metadata.json`, bhyve disk file, maybe `uefi.fd` file is optional.

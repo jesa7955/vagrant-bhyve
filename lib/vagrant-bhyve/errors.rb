@@ -46,6 +46,10 @@ module VagrantPlugins
       class RestartServiceFailed < VagrantBhyveError
 	error_key(:restart_service_failed)
       end
+
+      class NotFoundLeasesInfo < VagrantBhyveError
+	error_key(:not_found_leases_info)
+      end
     end
   end
 end

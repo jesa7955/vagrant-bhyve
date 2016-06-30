@@ -102,20 +102,21 @@ module VagrantPlugins
       #
       # @return [MachineState]
       def state
-	vm_name  = @machine.box.name.gsub('/', '_')
-	driver.store_attr('vm_name', vm_name)
 	state_id = nil
-	state_id = :not_created if !@machine.id
-	# Query the driver for the current state of the machine
-	state_id = @driver.state(vm_name) if @machine.id && !state_id
-	state_id = :unknown if !state_id
-        # Get the short and long description
+	if @machine.id
+	  vm_name	= driver.get_attr('vm_name')
+	  if vm_name.nil?
+	    state_id	= :not_created
+	  else
+	    state_id	= driver.state(vm_name)
+	  end
+	else
+	  state_id 	= :not_created
+	end
         short = state_id.to_s.gsub("_", " ")
         long  = I18n.t("vagrant_bhyve.states.#{state_id}")
         # If we're not created, then specify the special ID flag
-        if state_id == :not_created
-          state_id = Vagrant::MachineState::NOT_CREATED_ID
-        end
+        state_id = Vagrant::MachineState::NOT_CREATED_ID if state_id == :not_created
         # Return the MachineState object
         Vagrant::MachineState.new(state_id, short, long)
       end

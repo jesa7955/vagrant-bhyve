@@ -2,8 +2,10 @@ en:
   vagrant_bhyve:
     commands:
       common:
+        vm_not_created: |-
+          You are destroying a uncreated instance.
         vm_not_running: |-
-          You can't invoke this action on top of a box which is not running.
+          You are invokng this action on a box which is not running.
         vm_already_running: |-
           Your box has already be booted.
 
@@ -13,6 +15,8 @@ en:
           Checking if your system supports bhyve and loading kernel modules
           we need to creat VMs use bhyve. You will be asked for password for
           sudo if you are not running vagrant with root user.
+        import_box: |-
+          Copying box files.
         boot:
           setup_nat: |-
             Setting up a nat environment using pf and dnsmasq to provide 
@@ -31,6 +35,8 @@ en:
             We have to force your VM to halt.
           cleaning_up: |-
             Cleaning up your environment.
+        destroying: |-
+          Deleting copied box files.
 
     states:
       running: |-
@@ -70,3 +76,5 @@ en:
         install grub2-bhyve` or install through port(sysutils/grub2-bhyve)
       restart_service_failed: |-
         Failed to restart a service on your system.
+      not_found_leases_info: |-
+        Unable to found IP from dnsmasq's leases file

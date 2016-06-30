@@ -27,10 +27,22 @@ module VagrantPlugins
 	end
       end
 
-      def import(machine)
+      def import(machine, ui)
 	box_dir		= machine.box.directory
 	instance_dir	= @data_dir
 	store_attr('id', machine.id)
+	cp		= execute(false, "which gcp")
+	if cp.length == 0
+	  ui.warn "We need gcp in coreutils package to copy image file, installing from pkg."
+	  execute(false, "#{@sudo} ASSUME_ALWAYS_YES=yes pkg install coreutils")
+	end
+	execute(false, "gcp --sparse=always #{box_dir.join('disk.img').to_s} #{instance_dir.to_s}")
+	FileUtils.copy(box_dir.join('uefi.fd'), instance_dir) if box_dir.join('uefi.fd').exist?
+	FileUtils.copy(box_dir.join('device.map'), instance_dir) if box_dir.join('device.map').exist?
+      end
+
+      def destroy
+	FileUtils.rm_rf(Dir.glob(@data_dir.join('*').to_s))
       end
 
       def check_bhyve_support
@@ -119,8 +131,8 @@ module VagrantPlugins
 	# Basic settings
 	dnsmasq = execute(false, 'which dnsmasq')
 	if dnsmasq.length == 0
-	  ui.warn "dnsmasq is not installed on your system, installing using pkg, please confirm"
-	  execute(false, "#{@sudo} pkg install dnsmasq")
+	  ui.warn "dnsmasq is not installed on your system, installing using pkg."
+	  execute(false, "#{@sudo} ASSUME_ALWAYS_YES=yes pkg install dnsmasq")
 	end
 	dnsmasq_conf = directory.join("dnsmasq.conf")
 	dnsmasq_conf.open("w") do |dnsmasq_file|
@@ -155,23 +167,26 @@ module VagrantPlugins
       end
 
       def load(loader, machine)
-	run_cmd = @sudo
+	run_cmd		= @sudo
+	directory	= @data_dir
+	config		= machine.provider_config
 	case loader
 	when 'bhyveload'
 	  run_cmd += ' bhyveload'
 	  # Set autoboot, and memory and disk
-	  run_cmd += " -m #{machine.provider_config.memory}"
+	  run_cmd += " -m #{config.memory}"
 	  #########################################################
 	  #		TBD: problem with disk name		  #
 	  #########################################################
-	  run_cmd += " -d #{machine.box.directory.join('disk.img').to_s}"
+	  #run_cmd += " -d #{machine.box.directory.join('disk.img').to_s}"
+	  run_cmd += " -d #{directory.join('disk.img').to_s}"
 	  run_cmd += " -e autoboot_delay=0"
 	when 'grub-bhyve'
 	  command = execute(false, "which grub-bhyve")
 	  raise Errors::GrubBhyveNotInstalled if command.length == 0
 	  run_cmd += command
-	  run_cmd += " -m #{machine.box.directory.join('device.map').to_s}"
-	  run_cmd += " -M #{machine.provider_config.memory}"
+	  run_cmd += " -m #{directory.join('device.map').to_s}"
+	  run_cmd += " -M #{config.memory}"
 	  # Maybe there should be some grub config in Vagrantfile, for now
 	  # we just use this hd0,1 as default root and don't use -d -g 
 	  # argument
@@ -190,7 +205,7 @@ module VagrantPlugins
       def boot(machine)
 	firmware	= machine.box.metadata['firmware']
 	loader		= machine.box.metadata['loader']
-	directory	= machine.box.directory
+	directory	= @data_dir
 	config		= machine.provider_config
 
 	# Run in bhyve in background
@@ -226,6 +241,7 @@ module VagrantPlugins
 	run_cmd += " -m #{config.memory}"
 
 	# Disk 
+	#run_cmd += " -s 1,ahci-hd,#{machine.box.directory.join("disk.img").to_s}"
 	run_cmd += " -s 1,ahci-hd,#{directory.join("disk.img").to_s}"
 
 	# Tap device
