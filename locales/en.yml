@@ -3,7 +3,9 @@ en:
     commands:
       common:
         vm_not_running: |-
-          You can't invoke this action on top of a VM which is not running.
+          You can't invoke this action on top of a box which is not running.
+        vm_already_running: |-
+          Your box has already be booted.
 
     action:
       vm:
@@ -14,8 +16,8 @@ en:
         boot:
           setup_nat: |-
             Setting up a nat environment using pf and dnsmasq to provide 
-            network for VMs. You will dnsmasq installed on your system. 
-            Note that your /etc/pf.conf will be modified.
+            network for VMs. You will need to have dnsmasq installed on
+            your system.
           create_tap: |-
             Creating tap device for VM to use.
           load_kernel: |-
@@ -28,7 +30,7 @@ en:
           force_halt: |-
             We have to force your VM to halt.
           cleaning_up: |-
-            Cleaning up your system(e.g. desroy tap device).
+            Cleaning up your environment.
 
     states:
       running: |-

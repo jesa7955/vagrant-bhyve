@@ -32,6 +32,7 @@ module VagrantPlugins
 	  b.use ConfigValidate
 	  b.use Call, IsState, :running do |env, b1|
 	    if !env[:result]
+	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_running')
 	      next
 	    end
 
@@ -40,7 +41,11 @@ module VagrantPlugins
 		b2.use Shutdown
 	      end
 	    end
-	    b1.use Cleanup
+	  end
+	  b.use Call, IsState, :uncleaned do |env1, b1|
+	    if env1[:result]
+	      b1.use Cleanup
+	    end
 	  end
 	end
       end
@@ -59,15 +64,27 @@ module VagrantPlugins
 	end
       end
 
+      def self.action_ssh_run
+	Vagrant::Action::Builder.new.tap do |b|
+	  b.use ConfigValidate
+	  b.use Call, IsState, :running do |env, b1|
+	    if !env[:result]
+	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_running')
+	      next
+	    end
+	  b1.use SSHRun
+	  end
+	end
+      end
+
       def self.action_start
 	Vagrant::Action::Builder.new.tap do |b|
 	  b.use ConfigValidate
-	  b.use Call, IsState, :runnig do |env, b1|
+	  b.use Call, IsState, :running do |env, b1|
 	    if env[:result]
 	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_already_running')
 	      next
 	    end
-
 	    b1.use action_boot
 	  end
 	end

@@ -267,7 +267,6 @@ module VagrantPlugins
 	  else
 	    ui.warn "Unable to locate process id for #{vm_name}"
 	  end
-	  execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1")
 	end
       end
 
@@ -286,7 +285,11 @@ module VagrantPlugins
       def cleanup
 	switch		= get_attr('bridge')
 	tap		= get_attr('tap')
+	vm_name		= get_attr('vm_name')
 	directory	= @data_dir
+
+	# Destroy vmm device
+  	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1")
 
 	# Kill dnsmasq
 	dnsmasq_cmd = get_attr('dnsmasq')
@@ -307,16 +310,27 @@ module VagrantPlugins
       def state(vm_name)
 	# Prepare for other bhyve state which may be added in. For now, only
 	# running and not_running.
-	case
-	when running?(vm_name)
+	case running?(vm_name)
+	when 1
 	  :running
-	else
+	when 2
+	  :uncleaned
+	when 3
 	  :not_running
 	end
       end
 
       def running?(vm_name)
-	execute(true, "test -e /dev/vmm/#{vm_name}") == 0
+	vmm_exist = execute(true, "test -e /dev/vmm/#{vm_name}") == 0
+	if vmm_exist
+	  if execute(false, "pgrep -fx \"bhyve: #{vm_name}\"").length != 0
+	    1 
+	  else
+	    2
+	  end
+	else
+	   3
+	end
       end
 
       def execute(*cmd, **opts, &block)
@@ -363,6 +377,8 @@ module VagrantPlugins
 	name_file = @data_dir.join(attr)
 	if File.exist?(name_file)
 	  name_file.open('r') { |f| f.readline }
+	else
+	  nil
 	end
       end
 
