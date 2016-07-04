@@ -18,8 +18,7 @@ module VagrantPlugins
 
 	  env[:ui].info I18n.t('vagrant_bhyve.action.vm.import_box')
           @machine.id 	= SecureRandom.uuid
-	  id		= @machine.id.split(/-/)[-1] 
-	  vm_name	= "#{@machine.box.name.gsub('/', '_')}_#{id}"
+	  vm_name	= @machine.id.gsub('-'. '')
 	  @driver.store_attr('vm_name', vm_name)
 	  @driver.import(@machine, env[:ui])
 	  @app.call(env)

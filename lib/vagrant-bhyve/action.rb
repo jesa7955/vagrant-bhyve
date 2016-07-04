@@ -9,7 +9,7 @@ module VagrantPlugins
       action_root = Pathname.new(File.expand_path('../action', __FILE__))
       autoload :Setup, action_root.join('setup')
       autoload :Import, action_root.join('import')
-      autoload :CreateSwitch, action_root.join('create_switch')
+      autoload :CreateBridge, action_root.join('create_bridge')
       autoload :CreateTap, action_root.join('create_tap')
       autoload :Cleanup, action_root.join('cleanup')
       autoload :Load, action_root.join('load')
@@ -20,7 +20,7 @@ module VagrantPlugins
 
       def self.action_boot
 	Vagrant::Action::Builder.new.tap do |b|
-	  b.use CreateSwitch
+	  b.use CreateBridge
 	  b.use CreateTap
 	  b.use Load
 	  b.use Boot

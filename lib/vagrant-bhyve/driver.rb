@@ -34,7 +34,7 @@ module VagrantPlugins
 	cp		= execute(false, "which gcp")
 	if cp.length == 0
 	  ui.warn "We need gcp in coreutils package to copy image file, installing from pkg."
-	  execute(false, "#{@sudo} ASSUME_ALWAYS_YES=yes pkg install coreutils")
+	  pkg_install('coreutils')
 	end
 	execute(false, "gcp --sparse=always #{box_dir.join('disk.img').to_s} #{instance_dir.to_s}")
 	FileUtils.copy(box_dir.join('uefi.fd'), instance_dir) if box_dir.join('uefi.fd').exist?
@@ -74,10 +74,10 @@ module VagrantPlugins
       def create_network_device(device_name, device_type)
 	return if device_name.length == 0
 
-	# Check whether the switch has been created
+	# Check whether the bridge has been created
 	interface_name = get_interface_name(device_name)
 	interface_name = execute(false, "#{@sudo} ifconfig #{device_type} create") if interface_name.length == 0
-	raise Errors::UnableToCreateBridge if interface_name.length == 0
+	raise Errors::UnableToCreateInterface if interface_name.length == 0
 	# Add new created device's description
 	execute(false, "#{@sudo} ifconfig #{interface_name} description #{device_name} up")
 
@@ -86,27 +86,27 @@ module VagrantPlugins
 
 	# Configure tap device
 	if device_type == 'tap'
-	  # Add the tap device as switch's member
-	  switch = get_attr('bridge') 
+	  # Add the tap device as bridge's member
+	  bridge = get_attr('bridge')
 	  # Make sure the tap deivce has the same mtu value
-	  # with the switch
-	  mtu = execute(false, "ifconfig #{switch} | head -n1 | awk '{print $NF}'")
+	  # with the bridge
+	  mtu = execute(false, "ifconfig #{bridge} | head -n1 | awk '{print $NF}'")
 	  execute(false, "#{@sudo} ifconfig #{interface_name} mtu #{mtu}") if mtu.length != 0 and mtu != '1500'
-	  execute(false, "#{@sudo} ifconfig #{switch} addm #{interface_name}")
+	  execute(false, "#{@sudo} ifconfig #{bridge} addm #{interface_name}")
 	end
       end
 
       # For now, only IPv4 is supported
-      def enable_nat(switch_name, ui)
+      def enable_nat(bridge, ui)
 	directory	= @data_dir
 	id		= get_attr('id')
-	bridge_name 	= get_interface_name(switch_name)	
-	# Choose a subnet for this switch
+	bridge_name 	= get_interface_name(bridge)
+	# Choose a subnet for this bridge
 	index = bridge_name =~ /\d/
 	bridge_num = bridge_name[index..-1]
 	sub_net = "172.16." + bridge_num
 
-	# Config IP for the switch
+	# Config IP for the bridge
 	execute(false, "#{@sudo} ifconfig #{bridge_name} #{sub_net}.1/24")
 
 	# Get default gateway
@@ -122,6 +122,7 @@ module VagrantPlugins
 	pf_conf = directory.join("pf.conf")
 	pf_conf.open("w") do |pf_file|
 	  pf_file.puts "#vagrant-bhyve nat"
+	  pf_file.puts "set skip on #{bridge_name}"
 	  pf_file.puts "nat on #{gateway} from {#{sub_net}.0/24} to any ->(#{gateway})"
 	end
 	# Use pfctl to enable pf rules
@@ -132,7 +133,7 @@ module VagrantPlugins
 	dnsmasq = execute(false, 'which dnsmasq')
 	if dnsmasq.length == 0
 	  ui.warn "dnsmasq is not installed on your system, installing using pkg."
-	  execute(false, "#{@sudo} ASSUME_ALWAYS_YES=yes pkg install dnsmasq")
+	  pkg_install('dnsmasq')
 	end
 	dnsmasq_conf = directory.join("dnsmasq.conf")
 	dnsmasq_conf.open("w") do |dnsmasq_file|
@@ -166,7 +167,7 @@ module VagrantPlugins
 	ip = leases_info[0].split[2]
       end
 
-      def load(loader, machine)
+      def load(loader, machine, ui)
 	run_cmd		= @sudo
 	directory	= @data_dir
 	config		= machine.provider_config
@@ -175,15 +176,15 @@ module VagrantPlugins
 	  run_cmd += ' bhyveload'
 	  # Set autoboot, and memory and disk
 	  run_cmd += " -m #{config.memory}"
-	  #########################################################
-	  #		TBD: problem with disk name		  #
-	  #########################################################
 	  #run_cmd += " -d #{machine.box.directory.join('disk.img').to_s}"
 	  run_cmd += " -d #{directory.join('disk.img').to_s}"
 	  run_cmd += " -e autoboot_delay=0"
 	when 'grub-bhyve'
 	  command = execute(false, "which grub-bhyve")
-	  raise Errors::GrubBhyveNotInstalled if command.length == 0
+	  if command.length == 0
+	    ui.warn "grub-bhyve is not found on your system, installing with pkg"
+	    pkg_install('grub2-bhyve')
+	  end
 	  run_cmd += command
 	  run_cmd += " -m #{directory.join('device.map').to_s}"
 	  run_cmd += " -M #{config.memory}"
@@ -300,7 +301,7 @@ module VagrantPlugins
       end
 
       def cleanup
-	switch		= get_attr('bridge')
+	bridge		= get_attr('bridge')
 	tap		= get_attr('tap')
 	vm_name		= get_attr('vm_name')
 	id		= get_attr('id')
@@ -317,7 +318,7 @@ module VagrantPlugins
 	execute(false, "#{@sudo} kill -9 $(pgrep -fx \"#{dnsmasq_cmd}\")")
 
 	# Destory network interfaces
-	execute(false, "#{@sudo} ifconfig #{switch} destroy") if switch.length != 0
+	execute(false, "#{@sudo} ifconfig #{bridge} destroy") if bridge.length != 0
 	execute(false, "#{@sudo} ifconfig #{tap} destroy") if tap.length != 0
 
 	# Delete configure files
@@ -337,7 +338,7 @@ module VagrantPlugins
 	when 2
 	  :uncleaned
 	when 3
-	  :not_running
+	  :stoped
 	end
       end
 
@@ -366,7 +367,7 @@ module VagrantPlugins
 	mac += Digest::MD5.hexdigest(vm_name).scan(/../).select.with_index{ |_, i| i.even? }[0..2].join(':')[1..-1]
       end
 
-      # Get the interface name for a switch(like 'bridge0')
+      # Get the interface name for a bridge(like 'bridge0')
       def get_interface_name(device_name)
 	desc = device_name + '\$'
 	cmd = "ifconfig -a | grep -B 1 #{desc} | head -n1 | awk -F: '{print $1}'"
@@ -401,6 +402,10 @@ module VagrantPlugins
 	else
 	  nil
 	end
+      end
+
+      def pkg_install(package)
+	  execute(false, "#{@sudo} ASSUME_ALWAYS_YES=yes pkg install #{package}")
       end
 
       def store_attr(name, value)

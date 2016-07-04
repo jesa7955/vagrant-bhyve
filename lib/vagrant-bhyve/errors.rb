@@ -35,8 +35,8 @@ module VagrantPlugins
 	error_key(:unable_to_load_module)
       end
 
-      class UnableToCreateBridge < VagrantBhyveError
-	error_key(:unable_to_create_bridge)
+      class UnableToCreateInterface < VagrantBhyveError
+	error_key(:unable_to_create_interface)
       end
 
       class GrubBhyveNotinstalled < VagrantBhyveError

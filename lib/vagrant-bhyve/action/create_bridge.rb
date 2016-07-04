@@ -3,10 +3,10 @@ require "log4r"
 module VagrantPlugins
   module ProviderBhyve
     module Action
-      class CreateSwitch
+      class CreateBridge
 
 	def initialize(app, env)
-	  @logger = Log4r::Logger.new("vagrant_bhyve::action::create_switch")
+	  @logger = Log4r::Logger.new("vagrant_bhyve::action::create_bridge")
 	  @app = app
 	end
 
@@ -18,11 +18,11 @@ module VagrantPlugins
           @ui.info I18n.t('vagrant.actions.vm.boot.booting')
 	  @ui.detail I18n.t('vagrant_bhyve.action.vm.boot.setup_nat')
 
-	  switch_list 	= %w(vagrant_bhyve_default_switch)
-	  # The switch name is used as created bridge device's description
-	  switch_list.each do |switch|
-	    @driver.create_network_device(switch, "bridge")
-	    @driver.enable_nat(switch, @ui)
+	  bridge_list 	= %w(vagrant_bhyve_default_bridge)
+	  # The bridge name is used as created bridge device's description
+	  bridge_list.each do |bridge|
+	    @driver.create_network_device(bridge, "bridge")
+	    @driver.enable_nat(bridge, @ui)
 	  end
 	  @app.call(env)
 	end
