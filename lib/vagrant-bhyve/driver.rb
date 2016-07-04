@@ -98,9 +98,11 @@ module VagrantPlugins
 
       # For now, only IPv4 is supported
       def enable_nat(bridge, ui)
+	bridge_name 	= get_interface_name(bridge)
+	return if execute(true, "ifconfig #{bridge_name} | grep inet") == 0
+
 	directory	= @data_dir
 	id		= get_attr('id')
-	bridge_name 	= get_interface_name(bridge)
 	# Choose a subnet for this bridge
 	index = bridge_name =~ /\d/
 	bridge_num = bridge_name[index..-1]
@@ -126,7 +128,8 @@ module VagrantPlugins
 	  pf_file.puts "nat on #{gateway} from {#{sub_net}.0/24} to any ->(#{gateway})"
 	end
 	# Use pfctl to enable pf rules
-	execute(true, "#{@sudo} pfctl -a vagrant_#{id} -f #{pf_conf.to_s}").to_s
+	execute(false, "#{@sudo} cp #{pf_conf.to_s} /usr/local/etc/pf.#{bridge_name}.conf")
+	execute(false, "#{@sudo} pfctl -a vagrant_#{bridge_name} -f /usr/local/etc/pf.#{bridge_name}.conf")
 
 	# Create a basic dnsmasq setting
 	# Basic settings
@@ -149,19 +152,18 @@ module VagrantPlugins
 	  dnsmasq_file.puts "dhcp-range=#{sub_net + ".10," + sub_net + ".254"}"
 	  dnsmasq_file.puts "dhcp-option=option:dns-server,#{sub_net + ".1"}"
 	end
-	leases_file = @data_dir.join("#{bridge_name}.leases").to_s
-	dnsmasq_cmd = "dnsmasq -C #{dnsmasq_conf.to_s} -l #{leases_file} -x /var/run/#{bridge_name}_dnsmasq.pid"
-	store_attr('dnsmasq', dnsmasq_cmd)
-	execute(false, "#{@sudo} #{dnsmasq_cmd}") if execute(false, "pgrep -fx \"#{dnsmasq_cmd}\"").length == 0
+	execute(false, "#{@sudo} cp #{dnsmasq_conf.to_s} /usr/local/etc/dnsmasq.#{bridge_name}.conf")
+	dnsmasq_cmd = "dnsmasq -C /usr/local/etc/dnsmasq.#{bridge_name}.conf -l /var/run/dnsmasq.#{bridge_name}.leases -x /var/run/dnsmasq.#{bridge_name}.pid"
+	execute(false, "#{@sudo} #{dnsmasq_cmd}")
 
       end
 
       def get_ip_address(interface_name)
-	dnsmasq_cmd = get_attr('dnsmasq')
-	return if execute(false, "pgrep -fx \"#{dnsmasq_cmd}\"").length == 0
-	mac = get_mac_address
 	bridge_name = get_attr('bridge')
-	leases_info = @data_dir.join("#{bridge_name}.leases").open('r'){|f| f.readlines}.select{|line| line.match(mac)}
+	return nil if execute(true, "test -e /var/run/dnsmasq.#{bridge_name}.pid") != 0
+	mac = get_mac_address
+	leases_file = Pathname.new("/var/run/dnsmasq.#{bridge_name}.leases")
+	leases_info = leases_file.open('r'){|f| f.readlines}.select{|line| line.match(mac)}
 	raise Errors::NotFoundLeasesInfo if leases_info == []
 	# IP address for a device is on third coloum
 	ip = leases_info[0].split[2]
@@ -272,8 +274,12 @@ module VagrantPlugins
 	    # We need to kill bhyve process twice and wait some time to make
 	    # sure VM is shuted down.
 	    while bhyve_pid.length != 0
-	      execute(false, "#{@sudo} kill -s TERM #{bhyve_pid}")
-	      bhyve_pid = execute(false, "pgrep -fx 'bhyve: #{vm_name}'")
+	      begin
+		execute(false, "#{@sudo} kill -s TERM #{bhyve_pid}")
+		bhyve_pid = execute(false, "pgrep -fx 'bhyve: #{vm_name}'")
+	      rescue Errors::ExecuteError
+		break
+	      end
 	    end
 	  elsif loader_pid.length != 0
 	    ui.warn "Guest is going to be exit in bootloader stage"
@@ -284,9 +290,10 @@ module VagrantPlugins
 	end
       end
 
-      def forward_port(forward_information, pf_conf, tap_device)
+      def forward_port(forward_information, tap_device)
 	id		= get_attr('id')
 	ip_address	= get_ip_address(tap_device)
+	pf_conf 	= @data_dir.join('pf.conf')
 	tcp 		= "pass in on #{forward_information[:adapter]} proto tcp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
 	udp		= "pass in on #{forward_information[:adapter]} proto udp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
 	
@@ -295,8 +302,8 @@ module VagrantPlugins
 	  pf_file.puts udp
 	end
 	# Update pf rules
-#	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -f #{pf_conf.to_s}")
-#	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F")
+	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -f #{pf_conf.to_s}")
+	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F all")
 
       end
 
@@ -307,26 +314,32 @@ module VagrantPlugins
 	id		= get_attr('id')
 	directory	= @data_dir
 
-	# Clean pf rules
-	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F")
-
+	# Clean nat configurations if there is no VMS is using the bridge
+	member_num = execute(false, "ifconfig #{bridge} | grep -c 'member'")
+	if member_num.to_i <= 2
+	  execute(false, "#{@sudo} pfctl -a vagrant_#{bridge} -F all")
+	  execute(false, "#{@sudo} ifconfig #{bridge} destroy")
+	  execute(false, "#{@sudo} rm /usr/local/etc/pf.#{bridge}.conf")
+	  if execute(true, "test -e /var/run/dnsmasq.#{bridge}.pid") == 0
+	    dnsmasq_cmd = "dnsmasq -C /usr/local/etc/dnsmasq.#{bridge}.conf -l /var/run/dnsmasq.#{bridge}.leases -x /var/run/dnsmasq.#{bridge}.pid"
+	    execute(false, "#{@sudo} kill -9 $(pgrep -fx \"#{dnsmasq_cmd}\")")
+	    execute(false, "#{@sudo} rm /var/run/dnsmasq.#{bridge}.leases")
+	    execute(false, "#{@sudo} rm /var/run/dnsmasq.#{bridge}.pid")
+	    execute(false, "#{@sudo} rm /usr/local/etc/dnsmasq.#{bridge}.conf")
+	  end
+	end
+	
 	# Destroy vmm device
   	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1")
 
-	# Kill dnsmasq
-	dnsmasq_cmd = get_attr('dnsmasq')
-	execute(false, "#{@sudo} kill -9 $(pgrep -fx \"#{dnsmasq_cmd}\")")
-
-	# Destory network interfaces
-	execute(false, "#{@sudo} ifconfig #{bridge} destroy") if bridge.length != 0
+	# Clean instance-specific pf rules
+	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F all")
+	# Destory tap interfaces
 	execute(false, "#{@sudo} ifconfig #{tap} destroy") if tap.length != 0
-
+	
 	# Delete configure files
 	FileUtils.rm directory.join('dnsmasq.conf').to_s if directory.join('dnsmasq.conf').exist?
 	FileUtils.rm directory.join('pf.conf').to_s if directory.join('dnsmasq.conf').exist?
-
-	# Clean /etc/pf.conf
-	execute(false, "#{@sudo} sed -I '' '/# Include pf configure file to enable NAT for vagrant-bhyve/ {N;d;}' /etc/pf.conf")
       end
 
       def state(vm_name)
@@ -338,14 +351,14 @@ module VagrantPlugins
 	when 2
 	  :uncleaned
 	when 3
-	  :stoped
+	  :stopped
 	end
       end
 
       def running?(vm_name)
 	vmm_exist = execute(true, "test -e /dev/vmm/#{vm_name}") == 0
 	if vmm_exist
-	  if execute(false, "pgrep -fx \"bhyve: #{vm_name}\"").length != 0
+	  if execute(true, "pgrep -fx \"bhyve: #{vm_name}\"") == 0
 	    1 
 	  else
 	    2
@@ -388,8 +401,8 @@ module VagrantPlugins
       def find_available_nmdm
 	nmdm_num = 0
 	while true
-	  result = execute(false, "ls -l /dev/ | grep 'nmdm#{nmdm_num}A'")
-	  break if result.length == 0
+	  result = execute(true, "ls -l /dev/ | grep 'nmdm#{nmdm_num}A'")
+	  break if result != 0
 	  nmdm_num += 1
 	end
 	nmdm_num

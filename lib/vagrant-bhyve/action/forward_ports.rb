@@ -15,15 +15,14 @@ module VagrantPlugins
 	  @driver	= @machine.provider.driver
 
 	  env[:ui].info I18n.t('vagrant_bhyve.action.forward_ports')
-	  pf_conf 	= @machine.box.directory.join('pf.conf')
-	  tap_device 	= @machine.env[:tap]
+	  tap_device 	= @driver.get_attr('tap')
 	  @env[:forwarded_ports].each do |item|
 	    forward_information = {
 	      adapter: item[:adapter] || 'em0',
 	      guest_port: item[:guest],
 	      host_port: item[:host]
 	    }
-	    @driver.forward_port(forward_information, pf_conf, tap_device)
+	    @driver.forward_port(forward_information, tap_device)
 	  end
 	  @app.call(env)
 	end

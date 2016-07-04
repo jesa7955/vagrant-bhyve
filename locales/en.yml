@@ -41,7 +41,7 @@ en:
     states:
       running: |-
         Bhyve is running right now.
-      stoped: |-
+      stopped: |-
         Bhyve is not running right now.
       uncleaned: |-
         It seems that the box has been shutdown but there reamains a vmm 
@@ -77,4 +77,5 @@ en:
       restart_service_failed: |-
         Failed to restart a service on your system.
       not_found_leases_info: |-
-        Unable to found IP from dnsmasq's leases file
+        Unable to found IP from dnsmasq's leases file, please retry after a
+        few seconds.
