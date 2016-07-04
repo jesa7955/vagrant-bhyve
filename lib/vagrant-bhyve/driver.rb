@@ -93,6 +93,11 @@ module VagrantPlugins
 	  mtu = execute(false, "ifconfig #{bridge} | head -n1 | awk '{print $NF}'")
 	  execute(false, "#{@sudo} ifconfig #{interface_name} mtu #{mtu}") if mtu.length != 0 and mtu != '1500'
 	  execute(false, "#{@sudo} ifconfig #{bridge} addm #{interface_name}")
+	  # Setup VM-specific pf rules
+	  id		= get_attr('id')
+	  pf_conf	= @data_dir.join('pf.conf')
+	  pf_conf.open('w') { |f| f.puts "set skip on #{interface_name}" }
+	  execute(false, "#{@sudo} pfctl -a vagrant_#{id} -f #{pf_conf.to_s}")
 	end
       end
 
