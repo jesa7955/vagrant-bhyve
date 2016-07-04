@@ -320,7 +320,7 @@ module VagrantPlugins
 	directory	= @data_dir
 
 	# Clean nat configurations if there is no VMS is using the bridge
-	member_num = execute(false, "ifconfig #{bridge} | grep -c 'member'")
+	member_num = execute(false, "ifconfig #{bridge} | grep -c 'member' || true")
 	if member_num.to_i <= 2
 	  execute(false, "#{@sudo} pfctl -a vagrant_#{bridge} -F all")
 	  execute(false, "#{@sudo} ifconfig #{bridge} destroy")

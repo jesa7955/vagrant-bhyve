@@ -37,13 +37,15 @@ module VagrantPlugins
 	      next
 	    end
 
-	    b1.use Call, GracefulHalt, :not_running, :running do |env1, b2|
+	    b1.use Call, GracefulHalt, :stopped, :running do |env1, b2|
 	      if !env1[:result]
 		b2.use Shutdown
 	      end
 	    end
 	  end
-	  b.use Cleanup
+	  b.use Call, IsState, :uncleaned do |env, b1|
+	    b1.use Cleanup
+	  end
 	end
       end
 
@@ -114,15 +116,18 @@ module VagrantPlugins
               next
             end
 
-            b1.use Call, DestroyConfirm do |env2, b2|
-              if !env2[:result]
+            b1.use Call, DestroyConfirm do |env1, b2|
+              if !env1[:result]
                 b2.use Message, I18n.t(
                   'vagrant.commands.destroy.will_not_destroy',
                   name: env2[:machine].name)
                 next
               end
-
-              b2.use action_halt
+	      b2.use Call, IsState, :running do |env2, b3|
+		if env2[:result]
+		  b3.use action_halt
+		end
+	      end
               b2.use Destroy
               b2.use ProvisionerCleanup
             end

@@ -39,6 +39,8 @@ en:
           Deleting copied box files.
 
     states:
+      uncreated: |-
+        Your instance of this box haven't been created.
       running: |-
         Bhyve is running right now.
       stopped: |-
