@@ -13,7 +13,7 @@ en:
       vm:
         setup_environment: |-
           Checking if your system supports bhyve and loading kernel modules
-          we need to creat VMs use bhyve. You will be asked for password for
+          we need to create bhyve VMs. You will be asked for password for
           sudo if you are not running vagrant with root user.
         import_box: |-
           Copying box files.

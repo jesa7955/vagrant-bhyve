@@ -15,7 +15,7 @@ module VagrantPlugins
 	  @driver	= @machine.provider.driver
 
           env[:ui].detail I18n.t('vagrant_bhyve.action.vm.boot.booting')
-	  @driver.boot(@machine)
+	  @driver.boot(@machine, env[:ui])
 
 	  @app.call(env)
 	end

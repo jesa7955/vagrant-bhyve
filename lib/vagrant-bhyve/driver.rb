@@ -203,7 +203,7 @@ module VagrantPlugins
 	execute(false, run_cmd)
       end
 
-      def boot(machine)
+      def boot(machine, ui)
 	firmware	= machine.box.metadata['firmware']
 	loader		= machine.box.metadata['loader']
 	directory	= @data_dir
