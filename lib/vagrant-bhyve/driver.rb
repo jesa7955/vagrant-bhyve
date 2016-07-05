@@ -31,8 +31,8 @@ module VagrantPlugins
 	box_dir		= machine.box.directory
 	instance_dir	= @data_dir
 	store_attr('id', machine.id)
-	cp		= execute(false, "which gcp")
-	if cp.length == 0
+	cp		= execute(true, "which gcp")
+	if cp != 0
 	  ui.warn "We need gcp in coreutils package to copy image file, installing from pkg."
 	  pkg_install('coreutils')
 	end
@@ -107,7 +107,6 @@ module VagrantPlugins
 	return if execute(true, "ifconfig #{bridge_name} | grep inet") == 0
 
 	directory	= @data_dir
-	id		= get_attr('id')
 	# Choose a subnet for this bridge
 	index = bridge_name =~ /\d/
 	bridge_num = bridge_name[index..-1]
@@ -138,8 +137,8 @@ module VagrantPlugins
 
 	# Create a basic dnsmasq setting
 	# Basic settings
-	dnsmasq = execute(false, 'which dnsmasq')
-	if dnsmasq.length == 0
+	dnsmasq = execute(true, 'which dnsmasq')
+	if dnsmasq != 0
 	  ui.warn "dnsmasq is not installed on your system, installing using pkg."
 	  pkg_install('dnsmasq')
 	end
@@ -187,12 +186,12 @@ module VagrantPlugins
 	  run_cmd += " -d #{directory.join('disk.img').to_s}"
 	  run_cmd += " -e autoboot_delay=0"
 	when 'grub-bhyve'
-	  command = execute(false, "which grub-bhyve")
-	  if command.length == 0
+	  grub-bhyve = execute(true, "which grub-bhyve")
+	  if grub-bhyve != 0
 	    ui.warn "grub-bhyve is not found on your system, installing with pkg"
 	    pkg_install('grub2-bhyve')
 	  end
-	  run_cmd += command
+	  run_cmd += "grub-bhyve"
 	  run_cmd += " -m #{directory.join('device.map').to_s}"
 	  run_cmd += " -M #{config.memory}"
 	  # Maybe there should be some grub config in Vagrantfile, for now
@@ -321,26 +320,31 @@ module VagrantPlugins
 
 	# Clean nat configurations if there is no VMS is using the bridge
 	member_num = execute(false, "ifconfig #{bridge} | grep -c 'member' || true")
-	if member_num.to_i <= 2
+	if member_num.to_i <= 2 && member_num.to_i > 0
 	  execute(false, "#{@sudo} pfctl -a vagrant_#{bridge} -F all")
 	  execute(false, "#{@sudo} ifconfig #{bridge} destroy")
-	  execute(false, "#{@sudo} rm /usr/local/etc/pf.#{bridge}.conf")
-	  if execute(true, "test -e /var/run/dnsmasq.#{bridge}.pid") == 0
-	    dnsmasq_cmd = "dnsmasq -C /usr/local/etc/dnsmasq.#{bridge}.conf -l /var/run/dnsmasq.#{bridge}.leases -x /var/run/dnsmasq.#{bridge}.pid"
-	    execute(false, "#{@sudo} kill -9 $(pgrep -fx \"#{dnsmasq_cmd}\")")
-	    execute(false, "#{@sudo} rm /var/run/dnsmasq.#{bridge}.leases")
-	    execute(false, "#{@sudo} rm /var/run/dnsmasq.#{bridge}.pid")
-	    execute(false, "#{@sudo} rm /usr/local/etc/dnsmasq.#{bridge}.conf")
-	  end
+      pf_conf = "/usr/local/etc/pf.#{bridge}.conf"
+	  execute(false, "#{@sudo} rm #{pf_conf}") if execute(true, "test -e #{pf_conf}") == 0
 	end
+
+    if execute(true, "test -e /var/run/dnsmasq.#{bridge}.pid") == 0
+	  dnsmasq_cmd = "dnsmasq -C /usr/local/etc/dnsmasq.#{bridge}.conf -l /var/run/dnsmasq.#{bridge}.leases -x /var/run/dnsmasq.#{bridge}.pid"
+      dnsmasq_conf    = "/var/run/dnsmasq.#{bridge}.leases"
+      dnsmasq_leases  = "/var/run/dnsmasq.#{bridge}.pid"
+      dnsmasq_pid     = "/usr/local/etc/dnsmasq.#{bridge}.conf"
+	  execute(false, "#{@sudo} kill -9 $(pgrep -fx \"#{dnsmasq_cmd}\")")
+	  execute(false, "#{@sudo} rm #{dnsmasq_leases}") if execute(true, "test -e #{dnsmasq_leases}") == 0
+	  execute(false, "#{@sudo} rm #{dnsmasq_pid}") if execute(true, "test -e #{dnsmasq_pid}") == 0
+	  execute(false, "#{@sudo} rm #{dnsmasq_conf}") if execute(true, "test -e #{dnsmasq_conf}") == 0
+    end
 	
 	# Destroy vmm device
-  	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1")
+  	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1") if running(vm_name) == 2
 
 	# Clean instance-specific pf rules
 	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F all")
 	# Destory tap interfaces
-	execute(false, "#{@sudo} ifconfig #{tap} destroy") if tap.length != 0
+	execute(false, "#{@sudo} ifconfig #{tap} destroy") if execute(true, "ifconfig #{tap}") == 0
 	
 	# Delete configure files
 	FileUtils.rm directory.join('dnsmasq.conf').to_s if directory.join('dnsmasq.conf').exist?
@@ -350,7 +354,7 @@ module VagrantPlugins
       def state(vm_name)
 	# Prepare for other bhyve state which may be added in. For now, only
 	# running and not_running.
-	case running?(vm_name)
+	case running(vm_name)
 	when 1
 	  :running
 	when 2
@@ -360,7 +364,7 @@ module VagrantPlugins
 	end
       end
 
-      def running?(vm_name)
+      def running(vm_name)
 	vmm_exist = execute(true, "test -e /dev/vmm/#{vm_name}") == 0
 	if vmm_exist
 	  if execute(true, "pgrep -fx \"bhyve: #{vm_name}\"") == 0

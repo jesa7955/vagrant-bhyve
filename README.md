@@ -59,7 +59,7 @@ Here is steps needed to create a test box.
     ```
 
 3. Follow the instructions on [FreeBSD HandBook](https://www.freebsd.org/doc/handbook/virtualization-host-bhyve.html) to create FreeBSD VM image. Note to name the image to `disk.img` and remember to add a user named `vagrant` in the VM.
-4. Run `tar cvzf test.box ./Vagrantfil ./meta.json ./disk.img` to create a box.
+4. Run `tar cvzf test.box ./Vagrantfile ./metadata.json ./disk.img` to create a box.
 
 ### Adding the box
 
