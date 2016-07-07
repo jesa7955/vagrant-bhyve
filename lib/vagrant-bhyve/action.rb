@@ -17,6 +17,7 @@ module VagrantPlugins
       autoload :ForwardPorts, action_root.join('forward_ports')
       autoload :Shutdown, action_root.join('shutdown')
       autoload :Destroy, action_root.join('destroy')
+      autoload :WaitForIP, action_root.join('wait_for_ip')
 
       def self.action_boot
 	Vagrant::Action::Builder.new.tap do |b|
@@ -24,7 +25,8 @@ module VagrantPlugins
 	  b.use CreateTap
 	  b.use Load
 	  b.use Boot
-#	  b.use WaitForCommunicator, [:running]
+	  b.use WaitForIP
+         b.use ForwardPorts
 	end
       end
 
@@ -78,6 +80,7 @@ module VagrantPlugins
       def self.action_start
 	Vagrant::Action::Builder.new.tap do |b|
 	  b.use ConfigValidate
+         b.use Setup
 	  b.use Call, IsState, :running do |env, b1|
 	    if env[:result]
 	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_already_running')
@@ -99,7 +102,6 @@ module VagrantPlugins
 	  b.use ConfigValidate
 	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env,b1|
 	    if env[:result]
-	      b1.use Setup
 	      b1.use Import
 	    end
 	  end

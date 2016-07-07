@@ -17,6 +17,8 @@ en:
           sudo if you are not running vagrant with root user.
         import_box: |-
           Copying box files.
+        forward_ports: |-
+          Setup port forwarding.
         boot:
           setup_nat: |-
             Setting up a nat environment using pf and dnsmasq to provide 
@@ -28,6 +30,8 @@ en:
             Loading guest OS's kernel into memory.
           booting: |-
             Booting VM with bhyve.
+          wait_for_ip: |-
+            Please wait for a while until we can ssh into box.
         halt:
           shutting_down: |- 
             Trying to shutdown your VM through ACPI.

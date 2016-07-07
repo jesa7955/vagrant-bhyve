@@ -97,7 +97,10 @@ module VagrantPlugins
 	  id		= get_attr('id')
 	  pf_conf	= @data_dir.join('pf.conf')
 	  pf_conf.open('w') { |f| f.puts "set skip on #{interface_name}" }
-	  execute(false, "#{@sudo} pfctl -a vagrant_#{id} -f #{pf_conf.to_s}")
+         if pf_enabled?
+           execute(false, "#{@sudo} pfctl -d")
+         end
+	  execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -ef #{pf_conf.to_s}") 
 	end
       end
 
@@ -123,17 +126,21 @@ module VagrantPlugins
 	
 	# Enable forwarding
 	execute(false, "#{@sudo} sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1")
+	execute(false, "#{@sudo} sysctl net.inet6.ip6.forwarding=1 >/dev/null 2>&1")
 	
 	# Change pf's configuration
 	pf_conf = directory.join("pf.conf")
 	pf_conf.open("w") do |pf_file|
 	  pf_file.puts "#vagrant-bhyve nat"
 	  pf_file.puts "set skip on #{bridge_name}"
-	  pf_file.puts "nat on #{gateway} from {#{sub_net}.0/24} to any ->(#{gateway})"
+	  pf_file.puts "nat on #{gateway} from {#{sub_net}.0/24} to any -> (#{gateway})"
 	end
 	# Use pfctl to enable pf rules
 	execute(false, "#{@sudo} cp #{pf_conf.to_s} /usr/local/etc/pf.#{bridge_name}.conf")
-	execute(false, "#{@sudo} pfctl -a vagrant_#{bridge_name} -f /usr/local/etc/pf.#{bridge_name}.conf")
+       if pf_enabled?
+         execute(false, "#{@sudo} pfctl -d")
+       end
+	execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge_name}' -ef /usr/local/etc/pf.#{bridge_name}.conf")
 
 	# Create a basic dnsmasq setting
 	# Basic settings
@@ -165,12 +172,21 @@ module VagrantPlugins
       def get_ip_address(interface_name)
 	bridge_name = get_attr('bridge')
 	return nil if execute(true, "test -e /var/run/dnsmasq.#{bridge_name}.pid") != 0
-	mac = get_mac_address
+	mac         = get_attr('mac')
 	leases_file = Pathname.new("/var/run/dnsmasq.#{bridge_name}.leases")
 	leases_info = leases_file.open('r'){|f| f.readlines}.select{|line| line.match(mac)}
 	raise Errors::NotFoundLeasesInfo if leases_info == []
 	# IP address for a device is on third coloum
 	ip = leases_info[0].split[2]
+      end
+
+      def wait_for_ip
+        bridge_name = get_attr('bridge')
+        mac         = get_attr('mac')
+        leases_file = Pathname.new("/var/run/dnsmasq.#{bridge_name}.leases")
+        while leases_file.open('r'){|f| f.readlines}.select{|line| line.match(mac)} == []
+          sleep 1
+        end
       end
 
       def load(loader, machine, ui)
@@ -253,7 +269,7 @@ module VagrantPlugins
 
 	# Tap device
 	tap_device  = get_attr('tap')
-	mac_address = get_mac_address
+	mac_address = get_attr('mac')
 	run_cmd += " -s 2,virtio-net,#{tap_device},mac=#{mac_address}"
 
 	# Console
@@ -280,6 +296,7 @@ module VagrantPlugins
 	    while bhyve_pid.length != 0
 	      begin
 		execute(false, "#{@sudo} kill -s TERM #{bhyve_pid}")
+                sleep 1
 		bhyve_pid = execute(false, "pgrep -fx 'bhyve: #{vm_name}'")
 	      rescue Errors::ExecuteError
 		break
@@ -298,16 +315,17 @@ module VagrantPlugins
 	id		= get_attr('id')
 	ip_address	= get_ip_address(tap_device)
 	pf_conf 	= @data_dir.join('pf.conf')
-	tcp 		= "pass in on #{forward_information[:adapter]} proto tcp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
-	udp		= "pass in on #{forward_information[:adapter]} proto udp from any to any port #{forward_information[:host]} rdr-to #{ip_address} port #{forward_information[:guest]}"
+	rule 		= "rdr on #{forward_information[:adapter]} proto {udp, tcp} from any to any port #{forward_information[:host_port]} -> #{ip_address} port #{forward_information[:guest_port]}"
 	
 	pf_conf.open('a') do |pf_file|
-	  pf_file.puts tcp
-	  pf_file.puts udp
+	  pf_file.puts rule
 	end
 	# Update pf rules
-	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -f #{pf_conf.to_s}")
-	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F all")
+       if pf_enabled?
+         execute(false, "#{@sudo} pfctl -d")
+       end
+	execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -ef #{pf_conf.to_s}")
+	#execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F all")
 
       end
 
@@ -317,38 +335,42 @@ module VagrantPlugins
 	vm_name		= get_attr('vm_name')
 	id		= get_attr('id')
 	directory	= @data_dir
-
-	# Clean nat configurations if there is no VMS is using the bridge
-	member_num = execute(false, "ifconfig #{bridge} | grep -c 'member' || true")
-	if member_num.to_i <= 2 && member_num.to_i > 0
-	  execute(false, "#{@sudo} pfctl -a vagrant_#{bridge} -F all")
-	  execute(false, "#{@sudo} ifconfig #{bridge} destroy")
-      pf_conf = "/usr/local/etc/pf.#{bridge}.conf"
-	  execute(false, "#{@sudo} rm #{pf_conf}") if execute(true, "test -e #{pf_conf}") == 0
-	end
-
-    if execute(true, "test -e /var/run/dnsmasq.#{bridge}.pid") == 0
-	  dnsmasq_cmd = "dnsmasq -C /usr/local/etc/dnsmasq.#{bridge}.conf -l /var/run/dnsmasq.#{bridge}.leases -x /var/run/dnsmasq.#{bridge}.pid"
-      dnsmasq_conf    = "/var/run/dnsmasq.#{bridge}.leases"
-      dnsmasq_leases  = "/var/run/dnsmasq.#{bridge}.pid"
-      dnsmasq_pid     = "/usr/local/etc/dnsmasq.#{bridge}.conf"
-	  execute(false, "#{@sudo} kill -9 $(pgrep -fx \"#{dnsmasq_cmd}\")")
-	  execute(false, "#{@sudo} rm #{dnsmasq_leases}") if execute(true, "test -e #{dnsmasq_leases}") == 0
-	  execute(false, "#{@sudo} rm #{dnsmasq_pid}") if execute(true, "test -e #{dnsmasq_pid}") == 0
-	  execute(false, "#{@sudo} rm #{dnsmasq_conf}") if execute(true, "test -e #{dnsmasq_conf}") == 0
-    end
-	
+    
 	# Destroy vmm device
   	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1") if running(vm_name) == 2
 
 	# Clean instance-specific pf rules
-	execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F all")
+	execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -F all")
 	# Destory tap interfaces
 	execute(false, "#{@sudo} ifconfig #{tap} destroy") if execute(true, "ifconfig #{tap}") == 0
 	
 	# Delete configure files
-	FileUtils.rm directory.join('dnsmasq.conf').to_s if directory.join('dnsmasq.conf').exist?
-	FileUtils.rm directory.join('pf.conf').to_s if directory.join('dnsmasq.conf').exist?
+	#FileUtils.rm directory.join('dnsmasq.conf').to_s if directory.join('dnsmasq.conf').exist?
+	#FileUtils.rm directory.join('pf.conf').to_s if directory.join('pf.conf').exist?
+
+	# Clean nat configurations if there is no VMS is using the bridge
+       member_num = 3
+	member_num = execute(false, "ifconfig #{bridge} | grep -c 'member' || true") if execute(true, "ifconfig #{bridge}") == 0
+	if member_num.to_i < 2
+	  execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge}' -F all")
+          if directory.join('pf_disabled').exist?
+            FileUtils.rm directory.join('pf_disabled')
+            execute(false, "#{@sudo} pfctl -d")
+          end
+          execute(false, "#{@sudo} ifconfig #{bridge} destroy")
+          pf_conf = "/usr/local/etc/pf.#{bridge}.conf"
+          execute(false, "#{@sudo} rm #{pf_conf}") if execute(true, "test -e #{pf_conf}") == 0
+          if execute(true, "test -e /var/run/dnsmasq.#{bridge}.pid") == 0
+            dnsmasq_cmd = "dnsmasq -C /usr/local/etc/dnsmasq.#{bridge}.conf -l /var/run/dnsmasq.#{bridge}.leases -x /var/run/dnsmasq.#{bridge}.pid"
+            dnsmasq_conf    = "/var/run/dnsmasq.#{bridge}.leases"
+            dnsmasq_leases  = "/var/run/dnsmasq.#{bridge}.pid"
+            dnsmasq_pid     = "/usr/local/etc/dnsmasq.#{bridge}.conf"
+            execute(false, "#{@sudo} kill -9 $(pgrep -fx \"#{dnsmasq_cmd}\")")
+            execute(false, "#{@sudo} rm #{dnsmasq_leases}") if execute(true, "test -e #{dnsmasq_leases}") == 0
+            execute(false, "#{@sudo} rm #{dnsmasq_pid}") if execute(true, "test -e #{dnsmasq_pid}") == 0
+            execute(false, "#{@sudo} rm #{dnsmasq_conf}") if execute(true, "test -e #{dnsmasq_conf}") == 0
+          end
+        end
       end
 
       def state(vm_name)
@@ -381,9 +403,8 @@ module VagrantPlugins
 	@executor.execute(*cmd, **opts, &block)
       end
 
-      def get_mac_address
+      def get_mac_address(vm_name)
 	# Generate a mac address for this tap device from its vm_name
-	vm_name = get_attr('vm_name')
 	# IEEE Standards OUI for bhyve
 	mac = "58:9c:fc:0"
 	mac += Digest::MD5.hexdigest(vm_name).scan(/../).select.with_index{ |_, i| i.even? }[0..2].join(':')[1..-1]
@@ -399,12 +420,22 @@ module VagrantPlugins
       def restart_service(service_name)
 	status = execute(true, "service #{service_name} status >/dev/null 2>&1")
 	if status == 0
-	  cmd = "restart"
+	  cmd = "onerestart"
 	else
-	  cmd = "start"
+	  cmd = "onestart"
 	end
 	status = execute(true, "service #{service_name} #{cmd} >/dev/null 2>&1")
 	raise Errors::RestartServiceFailed if status != 0
+      end
+
+      def pf_enabled?
+        status = execute(true, "#{@sudo} pfctl -s all | grep -i disabled")
+        if status == 0
+          store_attr('pf_disabled', 'yes')
+          false
+        else
+          true
+        end
       end
 
       def find_available_nmdm

@@ -18,8 +18,10 @@ module VagrantPlugins
 
 	  env[:ui].info I18n.t('vagrant_bhyve.action.vm.import_box')
           @machine.id 	= SecureRandom.uuid
-	  vm_name	= @machine.id.gsub('-', '')[0..30]
+	  vm_name   = @machine.id.gsub('-', '')[0..30]
+         mac       = @driver.get_mac_address(vm_name)
 	  @driver.store_attr('vm_name', vm_name)
+         @driver.store_attr('mac', mac)
 	  @driver.import(@machine, env[:ui])
 	  @app.call(env)
 	end
