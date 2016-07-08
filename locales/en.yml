@@ -30,7 +30,7 @@ en:
             Loading guest OS's kernel into memory.
           booting: |-
             Booting VM with bhyve.
-          wait_for_ip: |-
+          wait_until_up: |-
             Please wait for a while until we can ssh into box.
         halt:
           shutting_down: |- 

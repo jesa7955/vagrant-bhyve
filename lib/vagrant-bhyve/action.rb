@@ -25,7 +25,12 @@ module VagrantPlugins
 	  b.use CreateTap
 	  b.use Load
 	  b.use Boot
-	  b.use WaitUntilUP
+	  b.use Call, WaitUntilUP do |env, b1|
+           if env[:uncleaned]
+             b1.use action_reload
+             next
+           end
+         end
          b.use ForwardPorts
 	end
       end
@@ -58,7 +63,6 @@ module VagrantPlugins
               b1.use Message I18n.t('vagrant_bhyve.commands.common.vm_not_created')
               next
             end
-            b1.use ConfigValidate
             b1.use Call, IsState, :stopped do |env1, b2|
               if env1[:result]
 	            b2.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_running')
@@ -67,6 +71,7 @@ module VagrantPlugins
                 b2.use action_halt
               end
             end
+            b1.use ConfigValidate
             b1.use action_start
           end
         end
@@ -101,12 +106,17 @@ module VagrantPlugins
       def self.action_start
 	Vagrant::Action::Builder.new.tap do |b|
 	  b.use ConfigValidate
-         b.use Setup
 	  b.use Call, IsState, :running do |env, b1|
 	    if env[:result]
 	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_already_running')
 	      next
 	    end
+           b1.use Call, IsState, :uncleaned do |env1, b2|
+             if env1[:result]
+               b2.use Cleanup
+             end
+           end
+           b1.use Setup
 	    b1.use action_boot
 	  end
 	end

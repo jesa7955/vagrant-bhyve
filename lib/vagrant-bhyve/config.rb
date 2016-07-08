@@ -18,6 +18,7 @@ module VagrantPlugins
       attr_accessor :pcis
       # Specify console device which will be attached to the VM
       attr_accessor :lpc
+      attr_accessor :hostbridge
 
       def initialize
 	@loader		= UNSET_VALUE
@@ -25,6 +26,7 @@ module VagrantPlugins
 	@memory		= UNSET_VALUE
 	@pcis		= UNSET_VALUE
 	@lpc		= UNSET_VALUE
+	@hostbridge	= UNSET_VALUE
       end
 
     end

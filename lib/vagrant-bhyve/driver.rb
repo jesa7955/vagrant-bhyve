@@ -180,13 +180,16 @@ module VagrantPlugins
 	ip = leases_info[0].split[2]
       end
 
-      def wait_for_ip
+      def ip_ready?
         bridge_name = get_attr('bridge')
         mac         = get_attr('mac')
         leases_file = Pathname.new("/var/run/dnsmasq.#{bridge_name}.leases")
-        while leases_file.open('r'){|f| f.readlines}.select{|line| line.match(mac)} == []
-          sleep 1
-        end
+        return (leases_file.open('r'){|f| f.readlines}.select{|line| line.match(mac)} != [])
+      end
+
+      def ssh_ready?(ssh_info)
+        return execute(true, "nc -z #{ssh_info[:host]} #{ssh_info[:port]}") == 0 if ssh_info[:host]
+        return false
       end
 
       def load(loader, machine, ui)
@@ -337,7 +340,7 @@ module VagrantPlugins
 	directory	= @data_dir
     
 	# Destroy vmm device
-  	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1") if running(vm_name) == 2
+  	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1") if state(vm_name) == :uncleaned
 
 	# Clean instance-specific pf rules
 	execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -F all")
@@ -374,28 +377,15 @@ module VagrantPlugins
       end
 
       def state(vm_name)
-	# Prepare for other bhyve state which may be added in. For now, only
-	# running and not_running.
-	case running(vm_name)
-	when 1
-	  :running
-	when 2
-	  :uncleaned
-	when 3
-	  :stopped
-	end
-      end
-
-      def running(vm_name)
 	vmm_exist = execute(true, "test -e /dev/vmm/#{vm_name}") == 0
 	if vmm_exist
 	  if execute(true, "pgrep -fx \"bhyve: #{vm_name}\"") == 0
-	    1 
+            :running
 	  else
-	    2
+	    :uncleaned
 	  end
 	else
-	   3
+          :stopped
 	end
       end
 
