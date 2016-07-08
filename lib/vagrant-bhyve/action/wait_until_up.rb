@@ -3,7 +3,7 @@ require "log4r"
 module VagrantPlugins
   module ProviderBhyve
     module Action
-      class WaitForIP
+      class WaitUntilUP
 
 	def initialize(app, env)
 	  @logger = Log4r::Logger.new("vagrant_bhyve::action::wait_for_ip")

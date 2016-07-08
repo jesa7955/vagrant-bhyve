@@ -18,7 +18,7 @@ en:
         import_box: |-
           Copying box files.
         forward_ports: |-
-          Setup port forwarding.
+          Setup port forwarding(if any).
         boot:
           setup_nat: |-
             Setting up a nat environment using pf and dnsmasq to provide 
