@@ -16,9 +16,9 @@ module VagrantPlugins
 
 	  env[:ui].info I18n.t('vagrant_bhyve.action.vm.forward_ports')
 
-         env[:forwarded_ports]  = compile_forwarded_ports(@machine.config)
+	  env[:forwarded_ports]  = compile_forwarded_ports(@machine.config)
 	  tap_device            = @driver.get_attr('tap')
-         gateway               = @driver.get_attr('gateway')
+	  gateway               = @driver.get_attr('gateway')
 	  env[:forwarded_ports].each do |item|
 	    forward_information = {
 	      adapter: item[:adapter] || gateway,
@@ -30,23 +30,23 @@ module VagrantPlugins
 	  @app.call(env)
 	end
 
-        private
+	private
 
-        def compile_forwarded_ports(config)
-          mappings = {}
-          config.vm.networks.each do |type, options|
-            next if options[:disabled]
+	def compile_forwarded_ports(config)
+	  mappings = {}
+	  config.vm.networks.each do |type, options|
+	    next if options[:disabled]
 
-            if type == :forwarded_port && options[:id] != 'ssh'
-              if options.fetch(:host_ip, '').to_s.strip.empty?
-                options.delete(:host_ip)
-              end
-              mappings[options[:host]] = options
-            end
-          end
-          mappings.values
+	    if type == :forwarded_port && options[:id] != 'ssh'
+	      if options.fetch(:host_ip, '').to_s.strip.empty?
+		options.delete(:host_ip)
+	      end
+	      mappings[options[:host]] = options
+	    end
+	  end
+	  mappings.values
 
-        end
+	end
       end
     end
   end

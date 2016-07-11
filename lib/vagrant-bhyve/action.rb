@@ -26,12 +26,12 @@ module VagrantPlugins
 	  b.use Load
 	  b.use Boot
 	  b.use Call, WaitUntilUP do |env, b1|
-           if env[:uncleaned]
-             b1.use action_reload
-             next
-           end
-         end
-         b.use ForwardPorts
+	    if env[:uncleaned]
+	      b1.use action_reload
+	      next
+	    end
+	  end
+	  b.use ForwardPorts
 	end
       end
 
@@ -57,26 +57,26 @@ module VagrantPlugins
       end
 
       def self.action_reload
-        Vagrant::Action::Builder.new.tap do |b|
-          b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env, b1|
-            if env[:result]
-              b1.use Message I18n.t('vagrant_bhyve.commands.common.vm_not_created')
-              next
-            end
-            b1.use Call, IsState, :stopped do |env1, b2|
-              if env1[:result]
-	            b2.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_running')
-                next
-              else
-                b2.use action_halt
-              end
-            end
-            b1.use ConfigValidate
-            b1.use action_start
-          end
-        end
+	Vagrant::Action::Builder.new.tap do |b|
+	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env, b1|
+	    if env[:result]
+	      b1.use Message I18n.t('vagrant_bhyve.commands.common.vm_not_created')
+	      next
+	    end
+	    b1.use Call, IsState, :stopped do |env1, b2|
+	      if env1[:result]
+		b2.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_running')
+		next
+	      else
+		b2.use action_halt
+	      end
+	    end
+	    b1.use ConfigValidate
+	    b1.use action_start
+	  end
+	end
       end
-      
+
       def self.action_ssh
 	Vagrant::Action::Builder.new.tap do |b|
 	  b.use ConfigValidate
@@ -98,7 +98,7 @@ module VagrantPlugins
 	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_running')
 	      next
 	    end
-	  b1.use SSHRun
+	    b1.use SSHRun
 	  end
 	end
       end
@@ -111,12 +111,12 @@ module VagrantPlugins
 	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_already_running')
 	      next
 	    end
-           b1.use Call, IsState, :uncleaned do |env1, b2|
-             if env1[:result]
-               b2.use Cleanup
-             end
-           end
-           b1.use Setup
+	    b1.use Call, IsState, :uncleaned do |env1, b2|
+	      if env1[:result]
+		b2.use Cleanup
+	      end
+	    end
+	    b1.use Setup
 	    b1.use action_boot
 	  end
 	end
@@ -141,31 +141,31 @@ module VagrantPlugins
       end
 
       def self.action_destroy
-        Vagrant::Action::Builder.new.tap do |b|
-          b.use ConfigValidate
-          b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env, b1|
-            if env[:result]
-              b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_created')
-              next
-            end
+	Vagrant::Action::Builder.new.tap do |b|
+	  b.use ConfigValidate
+	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env, b1|
+	    if env[:result]
+	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_created')
+	      next
+	    end
 
-            b1.use Call, DestroyConfirm do |env1, b2|
-              if !env1[:result]
-                b2.use Message, I18n.t(
-                  'vagrant.commands.destroy.will_not_destroy',
-                  name: env2[:machine].name)
-                next
-              end
+	    b1.use Call, DestroyConfirm do |env1, b2|
+	      if !env1[:result]
+		b2.use Message, I18n.t(
+		  'vagrant.commands.destroy.will_not_destroy',
+		  name: env2[:machine].name)
+		next
+	      end
 	      b2.use Call, IsState, :running do |env2, b3|
 		if env2[:result]
 		  b3.use action_halt
 		end
 	      end
-              b2.use Destroy
-              b2.use ProvisionerCleanup
-            end
-          end
-        end
+	      b2.use Destroy
+	      b2.use ProvisionerCleanup
+	    end
+	  end
+	end
       end
 
       def self.action_suspend

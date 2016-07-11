@@ -16,7 +16,7 @@ module VagrantPlugins
 	@machine = machine
 	@data_dir = @machine.data_dir
 	@executor = Executor::Exec.new
-	
+
 	# if vagrant is excecuted by root (or with sudo) then the variable
 	# will be empty string, otherwise it will be 'sudo' to make sure we
 	# can run bhyve, bhyveload and pf with sudo privilege
@@ -97,9 +97,9 @@ module VagrantPlugins
 	  id		= get_attr('id')
 	  pf_conf	= @data_dir.join('pf.conf')
 	  pf_conf.open('w') { |f| f.puts "set skip on #{interface_name}" }
-         if pf_enabled?
-           execute(false, "#{@sudo} pfctl -d")
-         end
+	  if pf_enabled?
+	    execute(false, "#{@sudo} pfctl -d")
+	  end
 	  execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -ef #{pf_conf.to_s}") 
 	end
       end
@@ -123,11 +123,11 @@ module VagrantPlugins
 	store_attr('gateway', gateway)
 	# Add gateway as a bridge member
 	execute(false, "#{@sudo} ifconfig #{bridge_name} addm #{gateway}")
-	
+
 	# Enable forwarding
 	execute(false, "#{@sudo} sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1")
 	execute(false, "#{@sudo} sysctl net.inet6.ip6.forwarding=1 >/dev/null 2>&1")
-	
+
 	# Change pf's configuration
 	pf_conf = directory.join("pf.conf")
 	pf_conf.open("w") do |pf_file|
@@ -137,9 +137,9 @@ module VagrantPlugins
 	end
 	# Use pfctl to enable pf rules
 	execute(false, "#{@sudo} cp #{pf_conf.to_s} /usr/local/etc/pf.#{bridge_name}.conf")
-       if pf_enabled?
-         execute(false, "#{@sudo} pfctl -d")
-       end
+	if pf_enabled?
+	  execute(false, "#{@sudo} pfctl -d")
+	end
 	execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge_name}' -ef /usr/local/etc/pf.#{bridge_name}.conf")
 
 	# Create a basic dnsmasq setting
@@ -181,15 +181,15 @@ module VagrantPlugins
       end
 
       def ip_ready?
-        bridge_name = get_attr('bridge')
-        mac         = get_attr('mac')
-        leases_file = Pathname.new("/var/run/dnsmasq.#{bridge_name}.leases")
-        return (leases_file.open('r'){|f| f.readlines}.select{|line| line.match(mac)} != [])
+	bridge_name = get_attr('bridge')
+	mac         = get_attr('mac')
+	leases_file = Pathname.new("/var/run/dnsmasq.#{bridge_name}.leases")
+	return (leases_file.open('r'){|f| f.readlines}.select{|line| line.match(mac)} != [])
       end
 
       def ssh_ready?(ssh_info)
-        return execute(true, "nc -z #{ssh_info[:host]} #{ssh_info[:port]}") == 0 if ssh_info[:host]
-        return false
+	return execute(true, "nc -z #{ssh_info[:host]} #{ssh_info[:port]}") == 0 if ssh_info[:host]
+	return false
       end
 
       def load(loader, machine, ui)
@@ -258,7 +258,7 @@ module VagrantPlugins
 	run_cmd += " -l bootrom,#{directory.join('uefi.fd').to_s}" if firmware == "uefi"
 
 	# TODO Enable graphics if the box is configed so
-	
+
 	uuid = get_attr('id')
 	run_cmd += " -U #{uuid}"
 
@@ -299,7 +299,7 @@ module VagrantPlugins
 	    while bhyve_pid.length != 0
 	      begin
 		execute(false, "#{@sudo} kill -s TERM #{bhyve_pid}")
-                sleep 1
+		sleep 1
 		bhyve_pid = execute(false, "pgrep -fx 'bhyve: #{vm_name}'")
 	      rescue Errors::ExecuteError
 		break
@@ -319,14 +319,14 @@ module VagrantPlugins
 	ip_address	= get_ip_address(tap_device)
 	pf_conf 	= @data_dir.join('pf.conf')
 	rule 		= "rdr on #{forward_information[:adapter]} proto {udp, tcp} from any to any port #{forward_information[:host_port]} -> #{ip_address} port #{forward_information[:guest_port]}"
-	
+
 	pf_conf.open('a') do |pf_file|
 	  pf_file.puts rule
 	end
 	# Update pf rules
-       if pf_enabled?
-         execute(false, "#{@sudo} pfctl -d")
-       end
+	if pf_enabled?
+	  execute(false, "#{@sudo} pfctl -d")
+	end
 	execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -ef #{pf_conf.to_s}")
 	#execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F all")
 
@@ -338,54 +338,54 @@ module VagrantPlugins
 	vm_name		= get_attr('vm_name')
 	id		= get_attr('id')
 	directory	= @data_dir
-    
+
 	# Destroy vmm device
-  	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1") if state(vm_name) == :uncleaned
+	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1") if state(vm_name) == :uncleaned
 
 	# Clean instance-specific pf rules
 	execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -F all")
 	# Destory tap interfaces
 	execute(false, "#{@sudo} ifconfig #{tap} destroy") if execute(true, "ifconfig #{tap}") == 0
-	
+
 	# Delete configure files
 	#FileUtils.rm directory.join('dnsmasq.conf').to_s if directory.join('dnsmasq.conf').exist?
 	#FileUtils.rm directory.join('pf.conf').to_s if directory.join('pf.conf').exist?
 
 	# Clean nat configurations if there is no VMS is using the bridge
-       member_num = 3
+	member_num = 3
 	member_num = execute(false, "ifconfig #{bridge} | grep -c 'member' || true") if execute(true, "ifconfig #{bridge}") == 0
 	if member_num.to_i < 2
 	  execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge}' -F all")
-          if directory.join('pf_disabled').exist?
-            FileUtils.rm directory.join('pf_disabled')
-            execute(false, "#{@sudo} pfctl -d")
-          end
-          execute(false, "#{@sudo} ifconfig #{bridge} destroy")
-          pf_conf = "/usr/local/etc/pf.#{bridge}.conf"
-          execute(false, "#{@sudo} rm #{pf_conf}") if execute(true, "test -e #{pf_conf}") == 0
-          if execute(true, "test -e /var/run/dnsmasq.#{bridge}.pid") == 0
-            dnsmasq_cmd = "dnsmasq -C /usr/local/etc/dnsmasq.#{bridge}.conf -l /var/run/dnsmasq.#{bridge}.leases -x /var/run/dnsmasq.#{bridge}.pid"
-            dnsmasq_conf    = "/var/run/dnsmasq.#{bridge}.leases"
-            dnsmasq_leases  = "/var/run/dnsmasq.#{bridge}.pid"
-            dnsmasq_pid     = "/usr/local/etc/dnsmasq.#{bridge}.conf"
-            execute(false, "#{@sudo} kill -9 $(pgrep -fx \"#{dnsmasq_cmd}\")")
-            execute(false, "#{@sudo} rm #{dnsmasq_leases}") if execute(true, "test -e #{dnsmasq_leases}") == 0
-            execute(false, "#{@sudo} rm #{dnsmasq_pid}") if execute(true, "test -e #{dnsmasq_pid}") == 0
-            execute(false, "#{@sudo} rm #{dnsmasq_conf}") if execute(true, "test -e #{dnsmasq_conf}") == 0
-          end
-        end
+	  if directory.join('pf_disabled').exist?
+	    FileUtils.rm directory.join('pf_disabled')
+	    execute(false, "#{@sudo} pfctl -d")
+	  end
+	  execute(false, "#{@sudo} ifconfig #{bridge} destroy")
+	  pf_conf = "/usr/local/etc/pf.#{bridge}.conf"
+	  execute(false, "#{@sudo} rm #{pf_conf}") if execute(true, "test -e #{pf_conf}") == 0
+	  if execute(true, "test -e /var/run/dnsmasq.#{bridge}.pid") == 0
+	    dnsmasq_cmd = "dnsmasq -C /usr/local/etc/dnsmasq.#{bridge}.conf -l /var/run/dnsmasq.#{bridge}.leases -x /var/run/dnsmasq.#{bridge}.pid"
+	    dnsmasq_conf    = "/var/run/dnsmasq.#{bridge}.leases"
+	    dnsmasq_leases  = "/var/run/dnsmasq.#{bridge}.pid"
+	    dnsmasq_pid     = "/usr/local/etc/dnsmasq.#{bridge}.conf"
+	    execute(false, "#{@sudo} kill -9 $(pgrep -fx \"#{dnsmasq_cmd}\")")
+	    execute(false, "#{@sudo} rm #{dnsmasq_leases}") if execute(true, "test -e #{dnsmasq_leases}") == 0
+	    execute(false, "#{@sudo} rm #{dnsmasq_pid}") if execute(true, "test -e #{dnsmasq_pid}") == 0
+	    execute(false, "#{@sudo} rm #{dnsmasq_conf}") if execute(true, "test -e #{dnsmasq_conf}") == 0
+	  end
+	end
       end
 
       def state(vm_name)
 	vmm_exist = execute(true, "test -e /dev/vmm/#{vm_name}") == 0
 	if vmm_exist
 	  if execute(true, "pgrep -fx \"bhyve: #{vm_name}\"") == 0
-            :running
+	    :running
 	  else
 	    :uncleaned
 	  end
 	else
-          :stopped
+	  :stopped
 	end
       end
 
@@ -419,13 +419,13 @@ module VagrantPlugins
       end
 
       def pf_enabled?
-        status = execute(true, "#{@sudo} pfctl -s all | grep -i disabled")
-        if status == 0
-          store_attr('pf_disabled', 'yes')
-          false
-        else
-          true
-        end
+	status = execute(true, "#{@sudo} pfctl -s all | grep -i disabled")
+	if status == 0
+	  store_attr('pf_disabled', 'yes')
+	  false
+	else
+	  true
+	end
       end
 
       def find_available_nmdm
@@ -437,7 +437,7 @@ module VagrantPlugins
 	end
 	nmdm_num
       end
-      
+
       def get_attr(attr)
 	name_file = @data_dir.join(attr)
 	if File.exist?(name_file)
@@ -448,7 +448,7 @@ module VagrantPlugins
       end
 
       def pkg_install(package)
-	  execute(false, "#{@sudo} ASSUME_ALWAYS_YES=yes pkg install #{package}")
+	execute(false, "#{@sudo} ASSUME_ALWAYS_YES=yes pkg install #{package}")
       end
 
       def store_attr(name, value)
