@@ -18,16 +18,15 @@ module VagrantPlugins
 
 	  vm_name = @driver.get_attr('vm_name')
 	  # Check whether ip is assigned
-	  while !env[:uncleand]
+	  env[:uncleaned] = false
+	  while !env[:uncleaned] && !@driver.ip_ready?
 	    sleep 1
-	    break if @driver.ip_ready?
 	    env[:uncleaned] = true if @driver.state(vm_name) == :uncleaned
 	  end
 	  
 	  # Check whether we have ssh access
-	  while !env[:uncleaned]
+	  while !env[:uncleaned] && !@driver.ssh_ready?(env[:machine].provider.ssh_info)
 	    sleep 1
-	    break if @driver.ssh_ready?(env[:machine].provider.ssh_info)
 	    env[:uncleaned] = true if @driver.state(vm_name) == :uncleaned
 	  end
 	  @app.call(env)

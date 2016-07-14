@@ -28,10 +28,10 @@ module VagrantPlugins
 	  b.use Call, WaitUntilUP do |env, b1|
 	    if env[:uncleaned]
 	      b1.use action_reload
-	      next
+	    else
+	      b1.use ForwardPorts
 	    end
 	  end
-	  b.use ForwardPorts
 	end
       end
 
@@ -39,15 +39,13 @@ module VagrantPlugins
 	Vagrant::Action::Builder.new.tap do |b|
 	  b.use ConfigValidate
 	  b.use Call, IsState, :running do |env, b1|
-	    if !env[:result]
-	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_running')
-	      next
-	    end
-
-	    b1.use Call, GracefulHalt, :stopped, :running do |env1, b2|
-	      if !env1[:result]
-		b2.use Shutdown
-	      end
+	    if env[:result]
+	      b1.use Shutdown
+	     # b1.use Call, GracefulHalt, :stopped, :running do |env1, b2|
+	     #   if !env1[:result]
+	     #     b2.use Shutdown
+	     #   end
+	     # end
 	    end
 	  end
 	  b.use Call, IsState, :uncleaned do |env, b1|
@@ -58,16 +56,14 @@ module VagrantPlugins
 
       def self.action_reload
 	Vagrant::Action::Builder.new.tap do |b|
+	  b.use Message, I18n.t('vagrant_bhyve.action.vm.reload.reloading')
 	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env, b1|
 	    if env[:result]
-	      b1.use Message I18n.t('vagrant_bhyve.commands.common.vm_not_created')
+	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_created')
 	      next
 	    end
 	    b1.use Call, IsState, :stopped do |env1, b2|
-	      if env1[:result]
-		b2.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_running')
-		next
-	      else
+	      if !env1[:result]
 		b2.use action_halt
 	      end
 	    end
@@ -153,7 +149,7 @@ module VagrantPlugins
 	      if !env1[:result]
 		b2.use Message, I18n.t(
 		  'vagrant.commands.destroy.will_not_destroy',
-		  name: env2[:machine].name)
+		  name: env1[:machine].name)
 		next
 	      end
 	      b2.use Call, IsState, :running do |env2, b3|

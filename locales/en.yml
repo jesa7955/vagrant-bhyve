@@ -39,6 +39,9 @@ en:
             We have to force your VM to halt.
           cleaning_up: |-
             Cleaning up your environment.
+        reload:
+          reloading: |-
+            Rebooting your box.
         destroying: |-
           Deleting copied box files.
 
