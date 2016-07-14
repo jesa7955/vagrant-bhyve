@@ -130,6 +130,7 @@ module VagrantPlugins
 	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env,b1|
 	    if env[:result]
 	      b1.use Import
+	      b1.use Provision
 	    end
 	  end
 	  b.use action_start
@@ -157,8 +158,32 @@ module VagrantPlugins
 		  b3.use action_halt
 		end
 	      end
+	      b2.use Call, IsState, :uncleaned do |env2, b3|
+		if env2[:result]
+		  b3.use Cleanup
+		end
+	      end
 	      b2.use Destroy
 	      b2.use ProvisionerCleanup
+	    end
+	  end
+	end
+      end
+
+      def self.action_provision
+	Vagrant::Action::Builder.new.tap do |b|
+	  b.use ConfigValidate
+	  b.use Call, IsState, Vagrant::MachineState::NOT_CREATED_ID do |env,b1|
+	    if env[:result]
+	      b1.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_created')
+	      next
+	    end
+	    b1.use Call, IsState, :running do |env1, b2|
+	      if !env1[:result]
+		b2.use Message, I18n.t('vagrant_bhyve.commands.common.vm_not_running')
+		next
+	      end
+	      b2.use Provision
 	    end
 	  end
 	end

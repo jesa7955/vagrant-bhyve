@@ -96,11 +96,24 @@ module VagrantPlugins
 	  # Setup VM-specific pf rules
 	  id		= get_attr('id')
 	  pf_conf	= @data_dir.join('pf.conf')
-	  pf_conf.open('w') { |f| f.puts "set skip on #{interface_name}" }
-	  if pf_enabled?
-	    execute(false, "#{@sudo} pfctl -d")
+	  pf_conf.open('w') do |f|
+	    f.puts "set skip on #{interface_name}" 
 	  end
-	  execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -ef #{pf_conf.to_s}") 
+	  comment_mark = "# vagrant-bhyve #{interface_name}"
+	  if execute(true, "test -s /etc/pf.conf") == 0
+	    if execute(true, "grep \"#{comment_mark}\" /etc/pf.conf") != 0
+	      execute(false, "#{@sudo} sed -i '' '1i\\\n#{comment_mark}\n' /etc/pf.conf")
+	      execute(false, "#{@sudo} sed -i '' '2i\\\ninclude \"#{pf_conf.to_s}\"\n' /etc/pf.conf")
+	    end
+	  else
+	    execute(false, "echo \"#{comment_mark}\" | #{@sudo} tee -a /etc/pf.conf")
+	    execute(false, "echo \"include \\\"#{pf_conf.to_s}\\\"\" | #{@sudo} tee -a /etc/pf.conf")
+	  end
+	  restart_service('pf')
+	  #execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -f #{pf_conf.to_s}") 
+	  #if !pf_enabled?
+	  #  execute(false, "#{@sudo} pfctl -e")
+	  #end
 	end
       end
 
@@ -131,16 +144,26 @@ module VagrantPlugins
 	# Change pf's configuration
 	pf_conf = directory.join("pf.conf")
 	pf_conf.open("w") do |pf_file|
-	  pf_file.puts "#vagrant-bhyve nat"
 	  pf_file.puts "set skip on #{bridge_name}"
 	  pf_file.puts "nat on #{gateway} from {#{sub_net}.0/24} to any -> (#{gateway})"
 	end
-	# Use pfctl to enable pf rules
-	execute(false, "#{@sudo} cp #{pf_conf.to_s} /usr/local/etc/pf.#{bridge_name}.conf")
-	if pf_enabled?
-	  execute(false, "#{@sudo} pfctl -d")
+	pf_bridge_conf = "/usr/local/etc/pf.#{bridge_name}.conf"
+	comment_mark = "# vagrant-bhyve #{bridge_name}"
+	execute(false, "#{@sudo} mv #{pf_conf.to_s} #{pf_bridge_conf}")
+	if execute(true, "test -s /etc/pf.conf") == 0
+	  if execute(true, "grep \"#{comment_mark}\" /etc/pf.conf") != 0
+	    execute(false, "#{@sudo} sed -i '' '1i\\\n#{comment_mark}\n' /etc/pf.conf")
+	    execute(false, "#{@sudo} sed -i '' '2i\\\ninclude \"#{pf_bridge_conf}\"\n' /etc/pf.conf")
+	  end
+	else
+	  execute(false, "echo \"#{comment_mark}\" | #{@sudo} tee -a /etc/pf.conf")
+	  execute(false, "echo \"include \\\"#{pf_bridge_conf}\\\"\" | #{@sudo} tee -a /etc/pf.conf")
 	end
-	execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge_name}' -ef /usr/local/etc/pf.#{bridge_name}.conf")
+	restart_service('pf')
+	# Use pfctl to enable pf rules
+	#execute(false, "#{@sudo} cp #{pf_conf.to_s} /usr/local/etc/pf.#{bridge_name}.conf")
+	#execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge_name}' -f /usr/local/etc/pf.#{bridge_name}.conf")
+	# execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge_name}' -sr")
 
 	# Create a basic dnsmasq setting
 	# Basic settings
@@ -188,7 +211,9 @@ module VagrantPlugins
       end
 
       def ssh_ready?(ssh_info)
-	return execute(true, "nc -z #{ssh_info[:host]} #{ssh_info[:port]}") == 0 if ssh_info[:host]
+	if ssh_info
+	  return execute(true, "nc -z #{ssh_info[:host]} #{ssh_info[:port]}") == 0
+	end
 	return false
       end
 
@@ -284,6 +309,9 @@ module VagrantPlugins
 	run_cmd += " #{vm_name} >/dev/null 2>&1"
 
 	execute(false, run_cmd)
+	while state(vm_name) != :running
+	  sleep 0.5
+	end
       end
 
       def shutdown(ui)
@@ -324,10 +352,19 @@ module VagrantPlugins
 	  pf_file.puts rule
 	end
 	# Update pf rules
-	if pf_enabled?
-	  execute(false, "#{@sudo} pfctl -d")
+	comment_mark = "# vagrant-bhyve #{tap_device}"
+	if execute(true, "test -s /etc/pf.conf") == 0
+	  if execute(true, "grep \"#{comment_mark}\" /etc/pf.conf") != 0
+	    execute(false, "#{@sudo} sed -i '' '1i\\\n#{comment_mark}\n' /etc/pf.conf")
+	    execute(false, "#{@sudo} sed -i '' '2i\\\ninclude \"#{pf_conf.to_s}\"\n' /etc/pf.conf")
+	  end
+	else
+	  execute(false, "echo \"#{comment_mark}\" | #{@sudo} tee -a /etc/pf.conf")
+	  execute(false, "echo \"include \\\"#{pf_conf.to_s}\\\"\" | #{@sudo} tee -a /etc/pf.conf")
 	end
-	execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -ef #{pf_conf.to_s}")
+	restart_service('pf')
+	#execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -f #{pf_conf.to_s}")
+	#execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -sr")
 	#execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F all")
 
       end
@@ -337,15 +374,21 @@ module VagrantPlugins
 	tap		= get_attr('tap')
 	vm_name		= get_attr('vm_name')
 	id		= get_attr('id')
+	mac		= get_attr('mac')
 	directory	= @data_dir
 
 	# Destroy vmm device
 	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1") if state(vm_name) == :uncleaned
 
 	# Clean instance-specific pf rules
-	execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -F all")
+	#execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -F all")
+	comment_mark_tap = "# vagrant-bhyve #{tap}"
+	if execute(true, "grep \"#{comment_mark_tap}\" /etc/pf.conf") == 0
+	  execute(false, "#{@sudo} sed -i '' '/#{comment_mark_tap}/,+1d' /etc/pf.conf")
+	end
 	# Destory tap interfaces
 	execute(false, "#{@sudo} ifconfig #{tap} destroy") if execute(true, "ifconfig #{tap}") == 0
+	execute(false, "#{@sudo} sed -i '' '/#{mac}/d' /var/run/dnsmasq.#{bridge}.leases") if execute(true, "grep \"#{mac}\" /var/run/dnsmasq.#{bridge}.leases") == 0
 
 	# Delete configure files
 	#FileUtils.rm directory.join('dnsmasq.conf').to_s if directory.join('dnsmasq.conf').exist?
@@ -353,14 +396,21 @@ module VagrantPlugins
 
 	# Clean nat configurations if there is no VMS is using the bridge
 	member_num = 3
-	member_num = execute(false, "ifconfig #{bridge} | grep -c 'member' || true") if execute(true, "ifconfig #{bridge}") == 0
-	if member_num.to_i < 2
-	  execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge}' -F all")
-	  if directory.join('pf_disabled').exist?
-	    FileUtils.rm directory.join('pf_disabled')
-	    execute(false, "#{@sudo} pfctl -d")
+	bridge_exist = execute(true, "ifconfig #{bridge}")
+	member_num = execute(false, "ifconfig #{bridge} | grep -c 'member' || true") if bridge_exist == 0
+
+	if bridge_exist != 0 || member_num.to_i < 2
+	  #execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge}' -F all")
+	  comment_mark_bridge = "# vagrant-bhyve #{bridge}"
+	  if execute(true, "grep \"#{comment_mark_bridge}\" /etc/pf.conf") == 0
+	    execute(false, "#{@sudo} sed -i '' '/#{comment_mark_bridge}/,+1d' /etc/pf.conf")
 	  end
-	  execute(false, "#{@sudo} ifconfig #{bridge} destroy")
+	  restart_service('pf')
+	  #if directory.join('pf_disabled').exist?
+	  #  FileUtils.rm directory.join('pf_disabled')
+	  #  execute(false, "#{@sudo} pfctl -d")
+	  #end
+	  execute(false, "#{@sudo} ifconfig #{bridge} destroy") if bridge_exist == 0
 	  pf_conf = "/usr/local/etc/pf.#{bridge}.conf"
 	  execute(false, "#{@sudo} rm #{pf_conf}") if execute(true, "test -e #{pf_conf}") == 0
 	  if execute(true, "test -e /var/run/dnsmasq.#{bridge}.pid") == 0
@@ -408,13 +458,13 @@ module VagrantPlugins
       end
 
       def restart_service(service_name)
-	status = execute(true, "service #{service_name} status >/dev/null 2>&1")
+	status = execute(true, "#{@sudo} pfctl -s all | grep -i disabled")
 	if status == 0
 	  cmd = "onerestart"
 	else
 	  cmd = "onestart"
 	end
-	status = execute(true, "service #{service_name} #{cmd} >/dev/null 2>&1")
+	status = execute(true, "#{@sudo} service #{service_name} #{cmd} >/dev/null 2>&1")
 	raise Errors::RestartServiceFailed if status != 0
       end
 
