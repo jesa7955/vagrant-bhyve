@@ -2,6 +2,24 @@
 
 This is a Vagrant plugin which enable FreeBSD's hypervisor bhyve as its backend.
 
+## Status
+
+| Function            | Status
+| :----------         | :-----
+| Box format          | Defined
+| Check bhyve support | Working
+| Cloning and booting | Working(needs gcp package to copy image)
+| Network             | Working(needs pf and dnsmasq to provider NAT and DHCP)
+| SSH/SSH run         | Working(SSH run may needs bash)
+| Graceful shutdown   | Working
+| ACPI shutdown       | Working
+| Destroying          | Working
+| Provision           | Working(Basically)
+| Port forwarding     | Not working
+| File sharing        | Not implemented(Maybe uses NFS at first and waits for bhyve's VirtFS support)
+| Suspend             | Not supported by bhyve yet
+| Resume              | Not supported by bhyve yet
+
 ## Installation
 
 ## Usage(Test)
