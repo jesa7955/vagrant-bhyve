@@ -38,7 +38,9 @@ module VagrantPlugins
 	end
 	execute(false, "gcp --sparse=always #{box_dir.join('disk.img').to_s} #{instance_dir.to_s}")
 	FileUtils.copy(box_dir.join('uefi.fd'), instance_dir) if box_dir.join('uefi.fd').exist?
-	FileUtils.copy(box_dir.join('device.map'), instance_dir) if box_dir.join('device.map').exist?
+	instance_dir.join('device.map').open('w') do |f|
+	  f.puts "(hd0) #{instance_dir.join('disk.img').to_s}"
+	end
       end
 
       def destroy
@@ -226,16 +228,15 @@ module VagrantPlugins
 	  run_cmd += ' bhyveload'
 	  # Set autoboot, and memory and disk
 	  run_cmd += " -m #{config.memory}"
-	  #run_cmd += " -d #{machine.box.directory.join('disk.img').to_s}"
 	  run_cmd += " -d #{directory.join('disk.img').to_s}"
 	  run_cmd += " -e autoboot_delay=0"
 	when 'grub-bhyve'
-	  grub-bhyve = execute(true, "which grub-bhyve")
-	  if grub-bhyve != 0
+	  grub_exist = execute(true, "which grub-bhyve")
+	  if grub_exist != 0
 	    ui.warn "grub-bhyve is not found on your system, installing with pkg"
 	    pkg_install('grub2-bhyve')
 	  end
-	  run_cmd += "grub-bhyve"
+	  run_cmd += " grub-bhyve"
 	  run_cmd += " -m #{directory.join('device.map').to_s}"
 	  run_cmd += " -M #{config.memory}"
 	  # Maybe there should be some grub config in Vagrantfile, for now
