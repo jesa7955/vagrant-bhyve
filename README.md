@@ -87,7 +87,7 @@ Here is steps needed to create a test box.
 
 This part records on how to create a box with one for other provider. With this method, you can skip remain steps. We are also [working on](https://github.com/swills/vagrant-mutate) automating this job.
 
-We use [FreeBSD-11.0-BETA1](https://atlas.hashicorp.com/freebsd/boxes/FreeBSD-11.0-BETA1) for VirtualBox here.
+We use [FreeBSD-11.0-BETA1](https://atlas.hashicorp.com/freebsd/boxes/FreeBSD-11.0-BETA1) for VirtualBox here. You should make sure the box has been downloaded.(With vagrant init and vagrant up --provider=virtualbox)
 
 1. Make a directory where vagrant store box file for the new provider
 ```bash

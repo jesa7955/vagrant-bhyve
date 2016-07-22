@@ -104,8 +104,17 @@ module VagrantPlugins
 	  comment_mark = "# vagrant-bhyve #{interface_name}"
 	  if execute(true, "test -s /etc/pf.conf") == 0
 	    if execute(true, "grep \"#{comment_mark}\" /etc/pf.conf") != 0
-	      execute(false, "#{@sudo} sed -i '' '1i\\\n#{comment_mark}\n' /etc/pf.conf")
-	      execute(false, "#{@sudo} sed -i '' '2i\\\ninclude \"#{pf_conf.to_s}\"\n' /etc/pf.conf")
+	      comment_mark_bridge = "# vagrant-bhyve #{bridge}"
+	      if execute(true, "grep \"#{comment_mark_bridge}\" /etc/pf.conf") != 0
+		execute(false, "#{@sudo} sed -i '' '1i\\\n#{comment_mark}\n' /etc/pf.conf")
+		execute(false, "#{@sudo} sed -i '' '2i\\\ninclude \"#{pf_conf.to_s}\"\n' /etc/pf.conf")
+	      else
+		bridge_line = execute(false, "grep -A 1 \"#{comment_mark_bridge}\" /etc/pf.conf | tail -1")
+		bridge_line = bridge_line.gsub("\"", "\\\"")
+		bridge_line = bridge_line.gsub("/", "\\/")
+		execute(false, "#{@sudo} sed -i '' '/#{bridge_line}/a\\\n#{comment_mark}\n' /etc/pf.conf")
+		execute(false, "#{@sudo} sed -i '' '/#{comment_mark}/a\\\ninclude \"#{pf_conf.to_s}\"\n' /etc/pf.conf")
+	      end
 	    end
 	  else
 	    execute(false, "echo \"#{comment_mark}\" | #{@sudo} tee -a /etc/pf.conf")
