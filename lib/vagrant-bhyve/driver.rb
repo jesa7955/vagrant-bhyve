@@ -146,7 +146,7 @@ module VagrantPlugins
 	gateway = execute(false, "netstat -4rn | grep default | awk '{print $4}'")
 	store_attr('gateway', gateway)
 	# Add gateway as a bridge member
-	execute(false, "#{@sudo} ifconfig #{bridge_name} addm #{gateway}")
+	#execute(false, "#{@sudo} ifconfig #{bridge_name} addm #{gateway}")
 
 	# Enable forwarding
 	execute(false, "#{@sudo} sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1")
@@ -301,14 +301,35 @@ module VagrantPlugins
 	run_cmd += " -c #{config.cpus}"
 	run_cmd += " -m #{config.memory}"
 
-	# Disk 
-	#run_cmd += " -s 1,ahci-hd,#{machine.box.directory.join("disk.img").to_s}"
-	run_cmd += " -s 1,ahci-hd,#{directory.join("disk.img").to_s}"
+	# Disk(if any)
+	run_cmd += " -s 1:0,ahci-hd,#{directory.join("disk.img").to_s}"
+	disk_id = 1
+	config.disks.each do |disk|
+	  if disk[:format] == "raw"
+	    if disk[:path]
+	      path = disk[:path]
+	    else
+	      path = directory.join(disk[:name].to_s).to_s + ".img"
+	    end
+	    execute(false, "truncate -s #{disk[:size]} #{path}")
+	    run_cmd += " -s 1:#{disk_id.to_s},ahci-hd,#{path.to_s}"
+	  end
+	  disk_id += 1
+	end
+
+	# CDROM(if any)
+	cdrom_id = 0
+	config.cdroms.each do |cdrom|
+	  path = File.realpath(cdrom[:path])
+	  run_cmd += " -s 2:#{cdrom_id.to_s},ahci-cd,#{path.to_s}"
+	  cdrom_id += 1
+	end
+	
 
 	# Tap device
 	tap_device  = get_attr('tap')
 	mac_address = get_attr('mac')
-	run_cmd += " -s 2,virtio-net,#{tap_device},mac=#{mac_address}"
+	run_cmd += " -s 3:0,virtio-net,#{tap_device},mac=#{mac_address}"
 
 	# Console
 	nmdm_num = find_available_nmdm

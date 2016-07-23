@@ -19,6 +19,9 @@ module VagrantPlugins
       # Specify console device which will be attached to the VM
       attr_accessor :lpc
       attr_accessor :hostbridge
+      # Addition storage
+      attr_accessor :disks
+      attr_accessor :cdroms
 
       def initialize
 	@loader		= UNSET_VALUE
@@ -27,6 +30,39 @@ module VagrantPlugins
 	@pcis		= UNSET_VALUE
 	@lpc		= UNSET_VALUE
 	@hostbridge	= UNSET_VALUE
+	@disks		= []
+	@cdroms		= []
+      end
+
+      def storage(options={})
+	if options[:device] == :cdrom
+	  _handle_cdrom_storage(options)
+	elsif options[:device] == :disk
+	  _handle_disk_storage(options)
+	end
+      end
+
+      def _handle_disk_storage(options={})
+	cdrom = {
+	  path: options[:path]
+	}
+	@cdroms << cdrom
+      end
+
+      def _handle_cdrom_storage(options={})
+	options = {
+	  path: nil,
+	  name: nil,
+	  size: "20G",
+	  format: "raw",
+	}.merge(options)
+
+	disk = {
+	  path: options[:path],
+	  size: options[:size],
+	}
+
+	@disks << disk
       end
 
     end
