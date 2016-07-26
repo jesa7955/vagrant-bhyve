@@ -33,7 +33,7 @@ module VagrantPlugins
 	store_attr('id', machine.id)
 	cp		= execute(true, "which gcp")
 	if cp != 0
-	  ui.warn "We need gcp in coreutils package to copy image file, installing from pkg."
+	  ui.warn "We need gcp in coreutils package to copy image file, installing with pkg."
 	  pkg_install('coreutils')
 	end
 	execute(false, "gcp --sparse=always #{box_dir.join('disk.img').to_s} #{instance_dir.to_s}")
@@ -180,7 +180,7 @@ module VagrantPlugins
 	# Basic settings
 	dnsmasq = execute(true, 'which dnsmasq')
 	if dnsmasq != 0
-	  ui.warn "dnsmasq is not installed on your system, installing using pkg."
+	  ui.warn "dnsmasq is not installed on your system, installing with pkg."
 	  pkg_install('dnsmasq')
 	end
 	dnsmasq_conf = directory.join("dnsmasq.conf")
@@ -229,38 +229,53 @@ module VagrantPlugins
       end
 
       def load(loader, machine, ui)
-	run_cmd		= @sudo
+	loader_cmd	= @sudo
 	directory	= @data_dir
 	config		= machine.provider_config
 	case loader
 	when 'bhyveload'
-	  run_cmd += ' bhyveload'
+	  loader_cmd += ' bhyveload'
 	  # Set autoboot, and memory and disk
-	  run_cmd += " -m #{config.memory}"
-	  run_cmd += " -d #{directory.join('disk.img').to_s}"
-	  run_cmd += " -e autoboot_delay=0"
+	  loader_cmd += " -m #{config.memory}"
+	  loader_cmd += " -d #{directory.join('disk.img').to_s}"
+	  loader_cmd += " -e autoboot_delay=0"
 	when 'grub-bhyve'
 	  grub_exist = execute(true, "which grub-bhyve")
 	  if grub_exist != 0
 	    ui.warn "grub-bhyve is not found on your system, installing with pkg"
 	    pkg_install('grub2-bhyve')
 	  end
-	  run_cmd += " grub-bhyve"
-	  run_cmd += " -m #{directory.join('device.map').to_s}"
-	  run_cmd += " -M #{config.memory}"
+	  loader_cmd += " grub-bhyve"
+	  loader_cmd += " -m #{directory.join('device.map').to_s}"
+	  loader_cmd += " -M #{config.memory}"
 	  # Maybe there should be some grub config in Vagrantfile, for now
 	  # we just use this hd0,1 as default root and don't use -d -g 
 	  # argument
-	  run_cmd += " -r hd0,1"
+	  if config.grub_config_file != ''
+	    grub_cfg = directory.join('grub.cfg')
+	    if !grub_cfg.exist?
+	      grub_cfg.open('w') {|f| f.write config.grub_config_file}
+	    end
+	    loader_cmd += " -r host -d #{directory.to_s}"
+	  else
+	    if config.grub_run_partition != ''
+	      loader_cmd += " -r hd0,#{config.grub_run_partition}"
+	    else
+	      loader_cmd += " -r hd0,1"
+	    end
+
+	    if config.grub_run_dir != ''
+	      loader_cmd += " -d #{config.grub_run_dir}"
+	    end
+	    # Find an available nmdm device and add it as loader's -m argument
+	    nmdm_num = find_available_nmdm
+	    loader_cmd += " -c /dev/nmdm#{nmdm_num}A"
+	  end
 	end
 
-	# Find an available nmdm device and add it as loader's -m argument
-	nmdm_num = find_available_nmdm
-	run_cmd += " -c /dev/nmdm#{nmdm_num}A"
-
 	vm_name = get_attr('vm_name')
-	run_cmd += " #{vm_name}"
-	execute(false, run_cmd)
+	loader_cmd += " #{vm_name}"
+	execute(false, loader_cmd)
       end
 
       def boot(machine, ui)
@@ -270,39 +285,39 @@ module VagrantPlugins
 	config		= machine.provider_config
 
 	# Run in bhyve in background
-	run_cmd = "sudo -b"
+	bhyve_cmd = "sudo -b"
 	# Prevent virtual CPU use 100% of host CPU
-	run_cmd += " bhyve -HP"
+	bhyve_cmd += " bhyve -HP"
 
 	# Configure for hostbridge & lpc device, Windows need slot 0 and 31
 	# while others don't care, so we use slot 0 and 31
 	case config.hostbridge
 	when 'amd'
-	  run_cmd += " -s 0,amd_hostbridge"
+	  bhyve_cmd += " -s 0,amd_hostbridge"
 	when 'no'
 	else
-	  run_cmd += " -s 0,hostbridge"
+	  bhyve_cmd += " -s 0,hostbridge"
 	end
-	run_cmd += " -s 31,lpc"
+	bhyve_cmd += " -s 31,lpc"
 
 	# Generate ACPI tables for FreeBSD guest
-	run_cmd += " -A" if loader == 'bhyveload'
+	bhyve_cmd += " -A" if loader == 'bhyveload'
 
 	# For UEFI, we need to point a UEFI firmware which should be 
 	# included in the box.
-	run_cmd += " -l bootrom,#{directory.join('uefi.fd').to_s}" if firmware == "uefi"
+	bhyve_cmd += " -l bootrom,#{directory.join('uefi.fd').to_s}" if firmware == "uefi"
 
 	# TODO Enable graphics if the box is configed so
 
 	uuid = get_attr('id')
-	run_cmd += " -U #{uuid}"
+	bhyve_cmd += " -U #{uuid}"
 
 	# Allocate resources
-	run_cmd += " -c #{config.cpus}"
-	run_cmd += " -m #{config.memory}"
+	bhyve_cmd += " -c #{config.cpus}"
+	bhyve_cmd += " -m #{config.memory}"
 
 	# Disk(if any)
-	run_cmd += " -s 1:0,ahci-hd,#{directory.join("disk.img").to_s}"
+	bhyve_cmd += " -s 1:0,ahci-hd,#{directory.join("disk.img").to_s}"
 	disk_id = 1
 	config.disks.each do |disk|
 	  if disk[:format] == "raw"
@@ -312,7 +327,7 @@ module VagrantPlugins
 	      path = directory.join(disk[:name].to_s).to_s + ".img"
 	    end
 	    execute(false, "truncate -s #{disk[:size]} #{path}")
-	    run_cmd += " -s 1:#{disk_id.to_s},ahci-hd,#{path.to_s}"
+	    bhyve_cmd += " -s 1:#{disk_id.to_s},ahci-hd,#{path.to_s}"
 	  end
 	  disk_id += 1
 	end
@@ -321,7 +336,7 @@ module VagrantPlugins
 	cdrom_id = 0
 	config.cdroms.each do |cdrom|
 	  path = File.realpath(cdrom[:path])
-	  run_cmd += " -s 2:#{cdrom_id.to_s},ahci-cd,#{path.to_s}"
+	  bhyve_cmd += " -s 2:#{cdrom_id.to_s},ahci-cd,#{path.to_s}"
 	  cdrom_id += 1
 	end
 	
@@ -329,17 +344,17 @@ module VagrantPlugins
 	# Tap device
 	tap_device  = get_attr('tap')
 	mac_address = get_attr('mac')
-	run_cmd += " -s 3:0,virtio-net,#{tap_device},mac=#{mac_address}"
+	bhyve_cmd += " -s 3:0,virtio-net,#{tap_device},mac=#{mac_address}"
 
 	# Console
 	nmdm_num = find_available_nmdm
 	@data_dir.join('nmdm_num').open('w') { |nmdm_file| nmdm_file.write nmdm_num }
-	run_cmd += " -l com1,/dev/nmdm#{nmdm_num}A"
+	bhyve_cmd += " -l com1,/dev/nmdm#{nmdm_num}A"
 
 	vm_name = get_attr('vm_name')
-	run_cmd += " #{vm_name} >/dev/null 2>&1"
+	bhyve_cmd += " #{vm_name} >/dev/null 2>&1"
 
-	execute(false, run_cmd)
+	execute(false, bhyve_cmd)
 	while state(vm_name) != :running
 	  sleep 0.5
 	end
@@ -408,6 +423,7 @@ module VagrantPlugins
 	mac		= get_attr('mac')
 	directory	= @data_dir
 
+	return unless bridge && tap
 	# Destroy vmm device
 	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1") if state(vm_name) == :uncleaned
 

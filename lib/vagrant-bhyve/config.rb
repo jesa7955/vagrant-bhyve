@@ -6,7 +6,12 @@ module VagrantPlugins
       # Loader used to load kernel before invoking bhyve.(grub2-bhyve or bhyveload)
       attr_accessor :loader
       
-      # Resources needed for the VM.
+      # Guest like CentOS-6 requires a customized grub config file
+      attr_accessor :grub_config_file
+
+      # Some arguments required by grub-bhyve
+      attr_accessor :grub_run_partition
+      attr_accessor :grub_run_dir
       
       # Specify the number of virtual CPUs.
       attr_accessor :cpus
@@ -24,14 +29,17 @@ module VagrantPlugins
       attr_accessor :cdroms
 
       def initialize
-	@loader		= UNSET_VALUE
-	@cpus		= UNSET_VALUE
-	@memory		= UNSET_VALUE
-	@pcis		= UNSET_VALUE
-	@lpc		= UNSET_VALUE
-	@hostbridge	= UNSET_VALUE
-	@disks		= []
-	@cdroms		= []
+	@loader			= UNSET_VALUE
+	@cpus			= UNSET_VALUE
+	@memory			= UNSET_VALUE
+	@pcis			= UNSET_VALUE
+	@lpc			= UNSET_VALUE
+	@hostbridge		= UNSET_VALUE
+	@grub_config_file	= ''
+	@grub_run_partition	= ''
+	@grub_run_dir 		= ''
+	@disks			= []
+	@cdroms			= []
       end
 
       def storage(options={})
