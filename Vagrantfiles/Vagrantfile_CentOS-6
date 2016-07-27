@@ -1,0 +1,14 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.provider :bhyve do |vm|
+    vm.grub_config_file = %{
+    linux (hd0,msdos1)/vmlinuz-2.6.32-642.1.1.el6.x86_64 root=/dev/mapper/VolGroup00-LogVol00
+    initrd (hd0,msdos1)/initramfs-2.6.32-642.1.1.el6.x86_64.img 
+    boot
+    }
+    vm.memory = "512M"
+    vm.cpus = "1"
+  end
+end

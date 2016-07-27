@@ -1,0 +1,11 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.provider :bhyve do |vm|
+    vm.grub_run_partition = "msdos1"
+    vm.memory = "512M"
+    vm.cpus = "1"
+  end
+end
+
