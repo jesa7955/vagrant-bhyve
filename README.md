@@ -32,9 +32,9 @@ This is a Vagrant plugin which enable FreeBSD's hypervisor bhyve as its backend.
 | ACPI shutdown       | Working
 | Destroying          | Working
 | Provision           | Working
+| File sharing        | Working(basical NFS, maybe switch to VirtFS in the future)
 | Booting(UEFI)	      | Not working
 | Port forwarding     | Not working
-| File sharing        | Not implemented(Maybe uses NFS at first and waits for bhyve's VirtFS support)
 | Suspend             | Not supported by bhyve yet
 | Resume              | Not supported by bhyve yet
 

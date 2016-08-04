@@ -7,16 +7,18 @@ module VagrantPlugins
       include Vagrant::Action::Builtin
 
       action_root = Pathname.new(File.expand_path('../action', __FILE__))
-      autoload :Setup, action_root.join('setup')
-      autoload :Import, action_root.join('import')
+      autoload :Boot, action_root.join('boot')
       autoload :CreateBridge, action_root.join('create_bridge')
       autoload :CreateTap, action_root.join('create_tap')
       autoload :Cleanup, action_root.join('cleanup')
-      autoload :Load, action_root.join('load')
-      autoload :Boot, action_root.join('boot')
-      autoload :ForwardPorts, action_root.join('forward_ports')
-      autoload :Shutdown, action_root.join('shutdown')
       autoload :Destroy, action_root.join('destroy')
+      autoload :ForwardPorts, action_root.join('forward_ports')
+      autoload :Import, action_root.join('import')
+      autoload :Load, action_root.join('load')
+      autoload :PrepareNFSSettings, action_root.join('prepare_nfs_settings')
+      autoload :PrepareNFSValidIds, action_root.join('prepare_nfs_valid_ids')
+      autoload :Setup, action_root.join('setup')
+      autoload :Shutdown, action_root.join('shutdown')
       autoload :WaitUntilUP, action_root.join('wait_until_up')
 
       def self.action_boot
@@ -32,6 +34,10 @@ module VagrantPlugins
 	      b1.use ForwardPorts
 	    end
 	  end
+	  b.use PrepareNFSValidIds
+	  b.use SyncedFolderCleanup
+	  b.use SyncedFolders
+	  b.use PrepareNFSSettings
 	end
       end
 
@@ -169,6 +175,8 @@ module VagrantPlugins
 	      end
 	      b2.use Destroy
 	      b2.use ProvisionerCleanup
+	      b2.use PrepareNFSValidIds
+	      b2.use SyncedFolderCleanup
 	    end
 	  end
 	end

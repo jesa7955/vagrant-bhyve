@@ -203,15 +203,20 @@ module VagrantPlugins
 
       end
 
-      def get_ip_address(interface_name)
+      def get_ip_address(interface_name, type=:guest)
 	bridge_name = get_attr('bridge')
-	return nil if execute(true, "test -e /var/run/dnsmasq.#{bridge_name}.pid") != 0
-	mac         = get_attr('mac')
-	leases_file = Pathname.new("/var/run/dnsmasq.#{bridge_name}.leases")
-	leases_info = leases_file.open('r'){|f| f.readlines}.select{|line| line.match(mac)}
-	raise Errors::NotFoundLeasesInfo if leases_info == []
-	# IP address for a device is on third coloum
-	ip = leases_info[0].split[2]
+	if type == :guest
+	  return nil if execute(true, "test -e /var/run/dnsmasq.#{bridge_name}.pid") != 0
+	  mac         = get_attr('mac')
+	  leases_file = Pathname.new("/var/run/dnsmasq.#{bridge_name}.leases")
+	  leases_info = leases_file.open('r'){|f| f.readlines}.select{|line| line.match(mac)}
+	  raise Errors::NotFoundLeasesInfo if leases_info == []
+	  # IP address for a device is on third coloum
+	  ip = leases_info[0].split[2]
+	elsif type == :host
+	  return nil if execute(true, "ifconfig #{bridge_name}")
+	  ip = execute(false, "ifconfig #{bridge_name} | grep -i inet").split[1]
+	end
       end
 
       def ip_ready?
