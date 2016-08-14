@@ -1,6 +1,8 @@
 require "log4r"
 require "fileutils"
 require "digest/md5"
+require "io/console"
+require "ruby_expect"
 
 
 module VagrantPlugins
@@ -32,15 +34,90 @@ module VagrantPlugins
 	instance_dir	= @data_dir
 	store_attr('id', machine.id)
 	cp		= execute(true, "which gcp")
+	fdisk		= execute(true, "which fdisk-linux")
+	ui.warn "We need to use your password to commmunicate with grub-bhyve, please make sure the password you input is correct"
+	password 	= ui.ask("Password:", echo: false)
 	if cp != 0
 	  ui.warn "We need gcp in coreutils package to copy image file, installing with pkg."
 	  pkg_install('coreutils')
 	end
-	execute(false, "gcp --sparse=always #{box_dir.join('disk.img').to_s} #{instance_dir.to_s}")
-	FileUtils.copy(box_dir.join('uefi.fd'), instance_dir) if box_dir.join('uefi.fd').exist?
-	instance_dir.join('device.map').open('w') do |f|
-	  f.puts "(hd0) #{instance_dir.join('disk.img').to_s}"
+	if fdisk != 0
+	  ui.warn "We need fdisk-linux to determine the bootloader we need, installing with pkg"
+	  pkg_install('fdisk-linux')
 	end
+	execute(false, "gcp --sparse=always #{box_dir.join('disk.img').to_s} #{instance_dir.to_s}")
+	if box_dir.join('uefi.fd').exist?
+	  FileUtils.copy(box_dir.join('uefi.fd'), instance_dir) 
+	  store_attr('firmware', 'uefi')
+	else
+	  store_attr('firmware', 'bios')
+	  boot_partition = execute(false, "fdisk-linux -lu #{instance_dir.join('disk.img').to_s} | grep 'disk.img' | grep -E '\\*' | awk '{print $1}'")
+	  if boot_partition == ''
+	    store_attr('bootloader', 'bhyveload')
+	  else
+	    store_attr('bootloader', 'grub-bhyve')
+	    instance_dir.join('device.map').open('w') do |f|
+	      f.puts "(hd0) #{instance_dir.join('disk.img').to_s}"
+	    end
+	    name_index		= boot_partition =~ /disk\.img/
+	    partition_name	= boot_partition[name_index..-1]
+	    partition_index	= partition_name =~ /\d/
+	    boot_partition	= partition_name[partition_index..-1]
+	    grub_run_partition	= "msdos#{boot_partition}"
+	    files		= grub_bhyve_execute("ls (hd0,#{grub_run_partition})/", password, :match)
+	    if files =~ /grub2\//
+	      grub_run_dir	= "/grub2"
+	      store_attr('grub_run_partition', grub_run_partition)
+	      store_attr('grub_run_dir', grub_run_dir)
+	    elsif files =~ /grub\//
+	      files		= grub_bhyve_execute("ls (hd0,#{grub_run_partition})/grub/", password, :match)
+	      if files =~ /grub\.conf/
+		grub_conf 		= grub_bhyve_execute("cat (hd0,#{grub_run_partition})/grub/grub.conf", password, :before)
+		info_index		= grub_conf =~ /title/
+		boot_info		= grub_conf[info_index..-1]
+		kernel_info_index	= boot_info =~ /kernel/
+		initrd_info_index	= boot_info =~ /initrd/
+		kernel_info		= boot_info[kernel_info_index..initrd_info_index - 1].gsub("\r\e[1B", "").gsub("kernel ", "linux (hd0,#{grub_run_partition})")
+		initrd_info 		= boot_info[initrd_info_index..-1].gsub("\r\e[1B", "").gsub("initrd ", "initrd (hd0,#{grub_run_partition})")
+		instance_dir.join('grub.cfg').open('w') do |f|
+		  f.puts kernel_info
+		  f.puts initrd_info
+		  f.puts  "boot"
+		end
+	      elsif files =~ /grub\.cfg/
+		store_attr('grub_run_partition', grub_run_partition)
+	      end
+	    else
+	      if files =~ /boot\//
+		files = grub_bhyve_execute("ls (hd0,#{grub_run_partition})/boot/", password, :match)
+		if files =~ /grub2/
+		  grub_run_dir	= "/boot/grub2"
+		  store_attr('grub_run_partition', grub_run_partition)
+		  store_attr('grub_run_dir', grub_run_dir)
+		elsif files =~ /grub/
+		  files		= grub_bhyve_execute("ls (hd0,#{grub_run_partition})/boot/grub/", password, :match)
+		  if files =~ /grub\.conf/
+		    grub_conf 		= grub_bhyve_execute("cat (hd0,#{grub_run_partition})/boot/grub/grub.conf", password, :before)
+		    info_index		= grub_conf =~ /title/
+		    boot_info		= grub_conf[info_index..-1]
+		    kernel_info_index	= boot_info =~ /kernel/
+		    initrd_info_index	= boot_info =~ /initrd/
+		    kernel_info		= boot_info[kernel_info_index..initrd_info_index - 1].gsub("\r\e[1B", "").gsub("kernel ","linux (hd0,#{grub_run_partition})/boot")
+		    initrd_info 	= boot_info[initrd_info_index..-1].gsub("\r\e[1B", "").gsub("initrd ", "initrd (hd0,#{grub_run_partition})/boot")
+		    instance_dir.join('grub.cfg').open('w') do |f|
+		      f.puts kernel_info
+		      f.puts initrd_info
+		      f.puts  "boot"
+		    end
+		  elsif files =~ /grub\.cfg/
+		    store_attr('grub_run_partition', grub_run_partition)
+		  end
+		end
+	      end
+	    end
+	  end
+	end
+	password = nil
       end
 
       def destroy
@@ -233,10 +310,11 @@ module VagrantPlugins
 	return false
       end
 
-      def load(loader, machine, ui)
+      def load(machine, ui)
 	loader_cmd	= @sudo
 	directory	= @data_dir
 	config		= machine.provider_config
+	loader		= get_attr('bootloader')
 	case loader
 	when 'bhyveload'
 	  loader_cmd += ' bhyveload'
@@ -256,21 +334,20 @@ module VagrantPlugins
 	  # Maybe there should be some grub config in Vagrantfile, for now
 	  # we just use this hd0,1 as default root and don't use -d -g 
 	  # argument
-	  if config.grub_config_file != ''
-	    grub_cfg = directory.join('grub.cfg')
-	    if !grub_cfg.exist?
-	      grub_cfg.open('w') {|f| f.write config.grub_config_file}
-	    end
+	  grub_cfg		= directory.join('grub.cfg')
+	  grub_run_partition	= get_attr('grub_run_partition')
+	  grub_run_dir		= get_attr('grub_run_dir')
+	  if grub_cfg.exist?
 	    loader_cmd += " -r host -d #{directory.to_s}"
 	  else
-	    if config.grub_run_partition != ''
-	      loader_cmd += " -r hd0,#{config.grub_run_partition}"
+	    if grub_run_partition
+	      loader_cmd += " -r hd0,#{grub_run_partition}"
 	    else
 	      loader_cmd += " -r hd0,1"
 	    end
 
-	    if config.grub_run_dir != ''
-	      loader_cmd += " -d #{config.grub_run_dir}"
+	    if grub_run_dir
+	      loader_cmd += " -d #{grub_run_dir}"
 	    end
 	    # Find an available nmdm device and add it as loader's -m argument
 	    nmdm_num = find_available_nmdm
@@ -555,6 +632,33 @@ module VagrantPlugins
 
       def store_attr(name, value)
 	@data_dir.join(name).open('w') { |f| f.write value }
+      end
+
+      def grub_bhyve_execute(command, password, member)
+	vm_name	= get_attr('vm_name')
+	exp = RubyExpect::Expect.spawn("sudo grub-bhyve -m #{@data_dir.join('device.map').to_s} -M 128M #{vm_name}")
+	exp.procedure do
+	  each do
+	    expect /Password:/ do
+	      send password
+	    end
+	    expect /grub> / do
+	      send command
+	    end
+	    expect /.*(grub> )$/ do
+	      send 'exit'
+	    end
+	  end
+	end
+	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name}")
+	case member
+	when :match
+	  return exp.match.to_s
+	when :before
+	  return exp.before.to_s
+	when :last_match
+	  return exp.last_match.to_s
+	end
       end
 
     end
