@@ -1,5 +1,3 @@
 {
-    "provider"     : "bhyve",
-    "firmware"	   : "bios",
-    "loader"       : "bhyveload"
+    "provider"     : "bhyve"
 }

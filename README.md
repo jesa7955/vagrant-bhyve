@@ -32,7 +32,7 @@ This is a Vagrant plugin which enable FreeBSD's hypervisor bhyve as its backend.
 | ACPI shutdown       | Working
 | Destroying          | Working
 | Provision           | Working
-| File sharing        | Working(basical NFS, maybe switch to VirtFS in the future)
+| File sharing        | Working(NFS and vagrant-sshfs, maybe switch to VirtFS in the future)
 | Booting(UEFI)	      | Not working
 | Port forwarding     | Not working
 | Suspend             | Not supported by bhyve yet
@@ -68,6 +68,8 @@ Note we will need package coreutils and dnsmasq(and of course we will need grub-
 
 ### Create a box
 
+Want solution for automating this part? Find process on [vagrant-mutate](https://github.com/swills/vagrant-mutate/tree/bhyve).
+
 #### Create a box from scratch
 
 Box format is a plain directory consist of `Vagrantfile`, `metadata.json`, bhyve disk file, and an optional `uefi.fd`
@@ -89,9 +91,9 @@ Available configurations for the provider are:
 	* **size**: specify the image file's virutal size.
 	* **format**: specify the format of disk image file. Bhyve only support raw images now but maybe we can extend vagrant-bhyve when bhyve supports more.
 * `cdroms`: Like `disks`, this is an array contains all ISO files which users want to attach to bhyve. Now, each cdrom is described by a hash contains only the path to a ISO file.
-* `grub_config_file`:
-* `grub_run_partition`:
-* `grub_run_dir`:
+* ~~`grub_config_file`:~~
+* ~~`grub_run_partition`:~~
+* ~~`grub_run_dir`:~~
 
 Here is steps needed to create a test box.
 
@@ -110,9 +112,7 @@ Here is steps needed to create a test box.
 
     ```json
     {
-        "provider"    : "bhyve",
-        "firmware"    : "bios",
-        "loader"      : "bhyveload"
+        "provider"    : "bhyve"
     }
     ```
 
@@ -133,9 +133,7 @@ $ mkdir ~/.vagrant.d/boxes/freebsd-VAGRANTSLASH-FreeBSD-11.0-BETA1/2016.07.08/bh
 2. Create a metadata.json mentioned above
 ```json
     {
-        "provider"    : "bhyve",
-        "firmware"    : "bios",
-        "loader"      : "bhyveload"
+        "provider"    : "bhyve"
     }
 ```
 And copy it to the new created directory
@@ -176,9 +174,7 @@ Most steps to create a Linux box with an exising one from Atlas are the same as 
 metadata.json we will need looks like this
 ```json
 {
-    "provider"    : "bhyve",
-    "firmware"    : "bios",
-    "loader"      : "grub-bhyve"
+    "provider"    : "bhyve"
 }
 
 ```
@@ -186,7 +182,7 @@ Vagrantfile looks like this. You can also download it from [here](https://raw.gi
 ```ruby
 Vagrant.configure("2") do |config|
     config.vm.provider :bhyve do |vm|
-      vm.grub_run_partition = "msdos1"
+#     vm.grub_run_partition = "msdos1"
       vm.memory = "512M"
       vm.cpus = "1"
     end
@@ -196,7 +192,7 @@ end
 
 ### Add the box
 
-    $ /path/to/vagrant-bhyve/bin/vagrant box add test.box
+    $ /path/to/vagrant-bhyve/bin/vagrant box add --name=test test.box
 
 ### Run the box
 

@@ -18,8 +18,6 @@ Vagrantfiles (such as project root Vagrantfiles).
 Bhyve box should define at least two data fields in `metadata.json` file.
 
 * provider - Provider name is bhyve.
-* firmaware - Firmware should be bios or uefi.
-* loader - Loader should be grub-bhyve or bhyveload when firmware is bios. This key should keep blank when firmware is uefi.
 
 ## Converting Boxes
 
