@@ -361,8 +361,8 @@ module VagrantPlugins
       end
 
       def boot(machine, ui)
-	firmware	= machine.box.metadata['firmware']
-	loader		= machine.box.metadata['loader']
+	firmware	= get_attr('firmware')
+	loader		= get_attr('bootloader')
 	directory	= @data_dir
 	config		= machine.provider_config
 
