@@ -35,15 +35,20 @@ module VagrantPlugins
 	store_attr('id', machine.id)
 	cp		= execute(true, "which gcp")
 	fdisk		= execute(true, "which fdisk-linux")
-	ui.warn "We need to use your password to commmunicate with grub-bhyve, please make sure the password you input is correct"
-	password 	= ui.ask("Password:", echo: false)
+	if @sudo == ''
+	  password = ''
+	else
+	  ui.warn "We need to use your password to commmunicate with grub-bhyve, please make sure the password you input is correct."
+	  ui.warn "When you don't need password to run sudo, just press Enter"
+	  password = ui.ask("Password:", echo: false)
+	end
 	if cp != 0
-	  ui.warn "We need gcp in coreutils package to copy image file, installing with pkg."
+	  ui.warn "We need gcp in coreutils package to copy image file, installing with pkg..."
 	  pkg_install('coreutils')
 	end
 	if fdisk != 0
-	  ui.warn "We need fdisk-linux to determine the bootloader we need, installing with pkg"
-	  pkg_install('fdisk-linux')
+	  ui.warn "We need fdisk-linux to determine the bootloader we need, installing with pkg..."
+	  pkg_install('linuxfdisk')
 	end
 	execute(false, "gcp --sparse=always #{box_dir.join('disk.img').to_s} #{instance_dir.to_s}")
 	if box_dir.join('uefi.fd').exist?
@@ -51,7 +56,7 @@ module VagrantPlugins
 	  store_attr('firmware', 'uefi')
 	else
 	  store_attr('firmware', 'bios')
-	  boot_partition = execute(false, "fdisk-linux -lu #{instance_dir.join('disk.img').to_s} | grep 'disk.img' | grep -E '\\*' | awk '{print $1}'")
+	  boot_partition = execute(false, "cd #{instance_dir.to_s} && fdisk-linux -lu disk.img | grep 'disk.img' | grep -E '\\*' | awk '{print $1}'")
 	  if boot_partition == ''
 	    store_attr('bootloader', 'bhyveload')
 	  else
@@ -59,11 +64,9 @@ module VagrantPlugins
 	    instance_dir.join('device.map').open('w') do |f|
 	      f.puts "(hd0) #{instance_dir.join('disk.img').to_s}"
 	    end
-	    name_index		= boot_partition =~ /disk\.img/
-	    partition_name	= boot_partition[name_index..-1]
-	    partition_index	= partition_name =~ /\d/
-	    boot_partition	= partition_name[partition_index..-1]
-	    grub_run_partition	= "msdos#{boot_partition}"
+	    partition_index	= boot_partition =~ /\d/
+	    partition_id	= boot_partition[partition_index..-1]
+	    grub_run_partition	= "msdos#{partition_id}"
 	    files		= grub_bhyve_execute("ls (hd0,#{grub_run_partition})/", password, :match)
 	    if files =~ /grub2\//
 	      grub_run_dir	= "/grub2"
@@ -117,7 +120,6 @@ module VagrantPlugins
 	    end
 	  end
 	end
-	password = nil
       end
 
       def destroy
@@ -257,7 +259,7 @@ module VagrantPlugins
 	# Basic settings
 	dnsmasq = execute(true, 'which dnsmasq')
 	if dnsmasq != 0
-	  ui.warn "dnsmasq is not installed on your system, installing with pkg."
+	  ui.warn "dnsmasq is not installed on your system, installing with pkg..."
 	  pkg_install('dnsmasq')
 	end
 	dnsmasq_conf = directory.join("dnsmasq.conf")
@@ -325,7 +327,7 @@ module VagrantPlugins
 	when 'grub-bhyve'
 	  grub_exist = execute(true, "which grub-bhyve")
 	  if grub_exist != 0
-	    ui.warn "grub-bhyve is not found on your system, installing with pkg"
+	    ui.warn "grub-bhyve is not found on your system, installing with pkg..."
 	    pkg_install('grub2-bhyve')
 	  end
 	  loader_cmd += " grub-bhyve"
@@ -637,16 +639,29 @@ module VagrantPlugins
       def grub_bhyve_execute(command, password, member)
 	vm_name	= get_attr('vm_name')
 	exp = RubyExpect::Expect.spawn("sudo grub-bhyve -m #{@data_dir.join('device.map').to_s} -M 128M #{vm_name}")
-	exp.procedure do
-	  each do
-	    expect /Password:/ do
-	      send password
+	if password == ''
+	  exp.procedure do
+	    each do
+	      expect /grub> / do
+		send command
+	      end
+	      expect /.*(grub> )$/ do
+		send 'exit'
+	      end
 	    end
-	    expect /grub> / do
-	      send command
-	    end
-	    expect /.*(grub> )$/ do
-	      send 'exit'
+	  end
+	else 
+	  exp.procedure do
+	    each do
+	      expect /Password:/ do
+		send password
+	      end
+	      expect /grub> / do
+		send command
+	      end
+	      expect /.*(grub> )$/ do
+		send 'exit'
+	      end
 	    end
 	  end
 	end
