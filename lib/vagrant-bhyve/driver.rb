@@ -35,13 +35,7 @@ module VagrantPlugins
 	store_attr('id', machine.id)
 	cp		= execute(true, "which gcp")
 	fdisk		= execute(true, "which fdisk-linux")
-	if @sudo == ''
-	  password = ''
-	else
-	  ui.warn "We need to use your password to commmunicate with grub-bhyve, please make sure the password you input is correct."
-	  ui.warn "When you don't need password to run sudo, just press Enter"
-	  password = ui.ask("Password:", echo: false)
-	end
+	password = ''
 	if cp != 0
 	  ui.warn "We need gcp in coreutils package to copy image file, installing with pkg..."
 	  pkg_install('coreutils')
@@ -60,6 +54,10 @@ module VagrantPlugins
 	  if boot_partition == ''
 	    store_attr('bootloader', 'bhyveload')
 	  else
+	    if @sudo != '' and execute(true, "sudo -n true") != 0
+	      ui.warn "We need to use your password to commmunicate with grub-bhyve, please make sure the password you input is correct."
+	      password = ui.ask("Password:", echo: false)
+	    end
 	    store_attr('bootloader', 'grub-bhyve')
 	    instance_dir.join('device.map').open('w') do |f|
 	      f.puts "(hd0) #{instance_dir.join('disk.img').to_s}"
