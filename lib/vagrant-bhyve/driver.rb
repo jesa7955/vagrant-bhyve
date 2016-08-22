@@ -54,7 +54,7 @@ module VagrantPlugins
 	  if boot_partition == ''
 	    store_attr('bootloader', 'bhyveload')
 	  else
-	    if @sudo != '' and execute(true, "sudo -n true") != 0
+	    if @sudo != '' and execute(true, "sudo -n grub-bhyve --help") != 0
 	      ui.warn "We need to use your password to commmunicate with grub-bhyve, please make sure the password you input is correct."
 	      password = ui.ask("Password:", echo: false)
 	    end

@@ -46,16 +46,16 @@ module VagrantPlugins
 	  b.use ConfigValidate
 	  b.use Call, IsState, :running do |env, b1|
 	    if env[:result]
-	      b1.use Shutdown
-	      #b1.use Call, GracefulHalt, :stopped, :running do |env1, b2|
-	      #  if !env1[:result]
-	      #    b2.use Call, IsState, :uncleaned do |env2, b3|
-	      #      if !env[:result]
-	      #        b3.use Shutdown
-	      #      end
-	      #    end
-	      #  end
-	      #end
+	      #b1.use Shutdown
+	      b1.use Call, GracefulHalt, :stopped, :running do |env1, b2|
+	        if !env1[:result]
+	          b2.use Call, IsState, :uncleaned do |env2, b3|
+	            if !env[:result]
+	              b3.use Shutdown
+	            end
+	          end
+	        end
+	      end
 	    end
 	  end
 	  b.use Call, IsState, :uncleaned do |env, b1|
