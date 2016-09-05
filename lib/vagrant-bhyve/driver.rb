@@ -33,17 +33,9 @@ module VagrantPlugins
 	box_dir		= machine.box.directory
 	instance_dir	= @data_dir
 	store_attr('id', machine.id)
-	cp		= execute(true, "which gcp")
-	fdisk		= execute(true, "which fdisk-linux")
 	password = ''
-	if cp != 0
-	  ui.warn "We need gcp in coreutils package to copy image file, installing with pkg..."
-	  pkg_install('coreutils')
-	end
-	if fdisk != 0
-	  ui.warn "We need fdisk-linux to determine the bootloader we need, installing with pkg..."
-	  pkg_install('linuxfdisk')
-	end
+	check_and_install('gcp', 'coreutils', ui)
+	check_and_install('fdisk-linux', 'linuxfdisk', ui)
 	execute(false, "gcp --sparse=always #{box_dir.join('disk.img').to_s} #{instance_dir.to_s}")
 	if box_dir.join('uefi.fd').exist?
 	  FileUtils.copy(box_dir.join('uefi.fd'), instance_dir) 
@@ -54,11 +46,16 @@ module VagrantPlugins
 	  if boot_partition == ''
 	    store_attr('bootloader', 'bhyveload')
 	  else
-	    if @sudo != '' and execute(true, "sudo -n grub-bhyve --help") != 0
+	    if execute(true, "sudo -n grub-bhyve --help") != 0
 	      ui.warn "We need to use your password to commmunicate with grub-bhyve, please make sure the password you input is correct."
 	      password = ui.ask("Password:", echo: false)
 	    end
+	    ui.info(password)
 	    store_attr('bootloader', 'grub-bhyve')
+	    # We need vmm module to be loaded to use grub-bhyve
+	    load_module('vmm')
+	    # Check whether grub-bhyve is installed
+	    check_and_install('grub-bhyve', 'grub2-bhyve', ui)
 	    instance_dir.join('device.map').open('w') do |f|
 	      f.puts "(hd0) #{instance_dir.join('disk.img').to_s}"
 	    end
@@ -255,11 +252,7 @@ module VagrantPlugins
 
 	# Create a basic dnsmasq setting
 	# Basic settings
-	dnsmasq = execute(true, 'which dnsmasq')
-	if dnsmasq != 0
-	  ui.warn "dnsmasq is not installed on your system, installing with pkg..."
-	  pkg_install('dnsmasq')
-	end
+	check_and_install('dnsmasq', 'dnsmasq', ui)
 	dnsmasq_conf = directory.join("dnsmasq.conf")
 	dnsmasq_conf.open("w") do |dnsmasq_file|
 	  dnsmasq_file.puts <<-EOF
@@ -323,11 +316,6 @@ module VagrantPlugins
 	  loader_cmd += " -d #{directory.join('disk.img').to_s}"
 	  loader_cmd += " -e autoboot_delay=0"
 	when 'grub-bhyve'
-	  grub_exist = execute(true, "which grub-bhyve")
-	  if grub_exist != 0
-	    ui.warn "grub-bhyve is not found on your system, installing with pkg..."
-	    pkg_install('grub2-bhyve')
-	  end
 	  loader_cmd += " grub-bhyve"
 	  loader_cmd += " -m #{directory.join('device.map').to_s}"
 	  loader_cmd += " -M #{config.memory}"
@@ -632,6 +620,14 @@ module VagrantPlugins
 
       def store_attr(name, value)
 	@data_dir.join(name).open('w') { |f| f.write value }
+      end
+
+      def check_and_install(command, package, ui)
+	command_exist = execute(true, "which #{command}")
+	if command_exist != 0
+	  ui.warn "We need #{command} in #{package} package, installing with pkg..."
+	  pkg_install(package)
+	end
       end
 
       def grub_bhyve_execute(command, password, member)
