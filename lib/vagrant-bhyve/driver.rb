@@ -50,7 +50,6 @@ module VagrantPlugins
 	      ui.warn "We need to use your password to commmunicate with grub-bhyve, please make sure the password you input is correct."
 	      password = ui.ask("Password:", echo: false)
 	    end
-	    ui.info(password)
 	    store_attr('bootloader', 'grub-bhyve')
 	    # We need vmm module to be loaded to use grub-bhyve
 	    load_module('vmm')
