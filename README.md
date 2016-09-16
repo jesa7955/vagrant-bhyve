@@ -12,6 +12,8 @@ This is a Vagrant plugin which enable FreeBSD's hypervisor bhyve as its backend.
   - [Run the box](#run-the-box)
   - [SSH into the box](#ssh-into-the-box)
   - [Shutdown the box and cleanup](#shutdown-the-box-and-cleanup)
+- [Known Issues](#known-issues)
+- [Installation](#installation)
 
 ## Status
 
@@ -97,9 +99,31 @@ This command will shutdown the booted VM and clean up environment
 
     $ /path/to/vagrant-bhyve/vagrant destroy
 
+## Known Issues
+
+### FreeBSD can't be shutdown gracefully
+
+This issue seems like a bug of Vagrant core. It even appears when I test
+with virtualbox provider. The are two know solutions:
+* Add `config.vm.guest = :freebsd` to Vagrantfile
+* Add `config.ssh.shell = "sh"` to Vagrantfile
+
+### Synced folder is not working correctlly
+
+I met this issue when I try to use vagrant-bhyve to boot `centos/7` box.
+Vagrant uses NFS as default synced folder type. When it fails on your
+machine and box, you can:
+* Add `config.vm.synced_folder ".", "/vagrant", type: "rsync"` to your
+  Vagrantfile to ensure that rsync type is used. Vagrant core will raise an
+  error to inform you when there is not rsync find in PATH
+* Run `vagrant plugin install vagrant-sshfs` to enable vagrant-sshfs
+
+
+
 ## Installation
 
-## Usage
+Now this gem has been published on [rubygems.org](https://rubygems.org/gems/vagrant-bhyve). You can install it through `vagrant plugin install vagrant-bhyve`
+to install it in a normal Vagrant environment
 
 ## Contributing
 
