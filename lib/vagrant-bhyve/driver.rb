@@ -3,7 +3,8 @@ require "fileutils"
 require "digest/md5"
 require "io/console"
 require "ruby_expect"
-
+require "json"
+require "ipaddr"
 
 module VagrantPlugins
   module ProviderBhyve
@@ -210,7 +211,7 @@ module VagrantPlugins
 	# Choose a subnet for this bridge
 	index = bridge_name =~ /\d/
 	bridge_num = bridge_name[index..-1]
-	sub_net = "172.16." + bridge_num
+	sub_net = _find_free_net.split('.')[0,2].join(".") + "." + bridge_num
 
 	# Config IP for the bridge
 	execute(false, "#{@sudo} ifconfig #{bridge_name} #{sub_net}.1/24")
@@ -668,6 +669,69 @@ module VagrantPlugins
 	  return exp.last_match.to_s
 	end
       end
+
+      def _find_local_subnets()
+        netstat4_json = `netstat -rn -4 --libxo json`
+        my_routes4_json = JSON.parse(netstat4_json)
+
+        my_routes4 = my_routes4_json['statistics']['route-information']['route-table']['rt-family'][0]['rt-entry']
+
+        local_nets = []
+        my_routes4.each do |route|
+          next if route['destination'] == "default"
+          local_nets.push(route['destination'])
+        end
+        return local_nets
+      end
+
+      def _ip_in_subnet(ip, net)
+        netaddr = IPAddr.new(net)
+        return netaddr === IPAddr.new(ip)
+      end
+
+      def _find_free_net()
+        local_networks = _find_local_subnets
+
+        # largest to smallest
+        (0..255).each do |i|
+          ip = "10." + i.to_s + ".0.0"
+          found = false
+          local_networks.each do |net|
+            if _ip_in_subnet(ip, net)
+              found = true
+            end
+          end
+          if found == false
+            return ip.to_s + "/8"
+          end
+        end
+
+        (16..31).each do |i|
+          ip = "172." + i.to_s + ".0.0"
+          found = false
+          local_networks.each do |net|
+            if _ip_in_subnet(ip, net)
+              found = true
+            end
+          end
+          if found == false
+            return ip.to_s + "/16"
+          end
+        end
+
+        (0..255).each do |i|
+          ip = "192.168." + i.to_s + ".0"
+          found = false
+          local_networks.each do |net|
+            if _ip_in_subnet(ip, net)
+              found = true
+            end
+          end
+          if found == false
+            return ip.to_s + "/24"
+          end
+        end
+      end # _find_free_net
 
     end
   end
