@@ -671,10 +671,30 @@ module VagrantPlugins
       end
 
       def _find_local_subnets()
-        netstat4_json = `netstat -rn -4 --libxo json`
-        my_routes4_json = JSON.parse(netstat4_json)
-
-        my_routes4 = my_routes4_json['statistics']['route-information']['route-table']['rt-family'][0]['rt-entry']
+        if `uname -K`.chomp >= "1100000"
+          netstat4_json = `netstat -rn -4 --libxo json`
+          my_routes4_json = JSON.parse(netstat4_json)
+          my_routes4 = my_routes4_json['statistics']['route-information']['route-table']['rt-family'][0]['rt-entry']
+        else
+          netstat = `netstat -rn -4`
+          my_routes4 = []
+          keys = []
+          down = false
+          netstat.split("\n").each do |line|
+            if line =~ /Destination/
+              line.split.each do |item|
+                keys.push(item.downcase)
+              end
+              down = true
+            elsif down
+              new_table = Hash.new
+              line.split.each_with_index do |item, index|
+                new_table[keys[index]] = item
+              end
+              my_routes4.push(new_table)
+            end
+          end
+        end
 
         local_nets = []
         my_routes4.each do |route|
