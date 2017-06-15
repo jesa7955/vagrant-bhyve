@@ -126,11 +126,11 @@ module VagrantPlugins
 	raise Errors::SystemVersionIsTooLow if result == 0
 
 	# Check whether POPCNT is supported
-	result = execute(false, "#{@sudo} grep -E '^[ ] +Features2' /var/run/dmesg.boot | tail -n 1")
+	result = execute(false, "#{@sudo} grep -E '[^\[\d*\]]?[ ]* +Features2' /var/run/dmesg.boot | grep -v AMD")
 	raise Errors::MissingPopcnt unless result =~ /POPCNT/
 
 	# Check whether EPT is supported for Intel
-	result = execute(false, "#{@sudo} grep -E '^[ ]+VT-x' /var/run/dmesg.boot | tail -n 1")
+	result = execute(false, "#{@sudo} grep -E '[^\[\d*\]]?[ ]*VT-x:' /var/run/dmesg.boot | tail -n 1")
 	raise Errors::MissingEpt unless result =~ /EPT/
 
 	# Check VT-d 
