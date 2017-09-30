@@ -13,8 +13,9 @@ module VagrantPlugins
 	def call(env)
 	  @machine              = env[:machine]
 	  @driver               = @machine.provider.driver
+	  @ui                   = env[:ui]
 
-	  env[:ui].info I18n.t('vagrant_bhyve.action.vm.forward_ports')
+	  @ui.info I18n.t('vagrant_bhyve.action.vm.forward_ports')
 
 	  env[:forwarded_ports]  = compile_forwarded_ports(@machine.config)
 	  tap_device            = @driver.get_attr('tap')
@@ -25,7 +26,7 @@ module VagrantPlugins
 	      guest_port: item[:guest],
 	      host_port: item[:host]
 	    }
-	    @driver.forward_port(forward_information, tap_device)
+	    @driver.forward_port(forward_information, tap_device, @ui)
 	  end
 	  @app.call(env)
 	end

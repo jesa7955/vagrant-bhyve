@@ -146,6 +146,28 @@ module VagrantPlugins
 	end
       end
 
+      def check_or_create_default_pfconf(ui)
+        if execute(true, "test -s /etc/pf.conf") != 0
+	  ui.warn I18n.t("vagrant_bhyve.action.vm.boot.create_default_pfconf")
+
+          # probably this could be done in a nicer way with open and puts...
+          execute(false, "echo \"nat-anchor \\\"vagrant/*\\\"\" | #{@sudo} tee -a /etc/pf.conf")
+          execute(false, "echo \"rdr-anchor \\\"vagrant/*\\\"\" | #{@sudo} tee -a /etc/pf.conf")
+          execute(false, "echo \"anchor \\\"vagrant/*\\\"\" | #{@sudo} tee -a /etc/pf.conf")
+	  restart_service('pf')
+        else
+          if execute(true, 'pfctl -sn | grep -q "nat-anchor .vagrant/"') != 0
+	    ui.warn I18n.t("vagrant_bhyve.errors.nat_anchor_not_found")
+          end
+          if execute(true, 'pfctl -sn | grep -q "nat-anchor .vagrant/"') != 0
+	    ui.warn I18n.t("vagrant_bhyve.errors.rdr_anchor_not_found")
+          end
+          if execute(true, 'pfctl -sr | grep -q "anchor .vagrant/"') != 0
+	    ui.error I18n.t("vagrant_bhyve.errors.anchor_not_found")
+          end
+        end
+      end
+
       def create_network_device(device_name, device_type)
 	return if device_name.length == 0
 
@@ -174,27 +196,8 @@ module VagrantPlugins
 	  pf_conf.open('w') do |f|
 	    f.puts "set skip on #{interface_name}" 
 	  end
-	  comment_mark = "# vagrant-bhyve #{interface_name}"
-	  if execute(true, "test -s /etc/pf.conf") == 0
-	    if execute(true, "grep \"#{comment_mark}\" /etc/pf.conf") != 0
-	      comment_mark_bridge = "# vagrant-bhyve #{bridge}"
-	      if execute(true, "grep \"#{comment_mark_bridge}\" /etc/pf.conf") != 0
-		execute(false, "#{@sudo} sed -i '' '1i\\\n#{comment_mark}\n' /etc/pf.conf")
-		execute(false, "#{@sudo} sed -i '' '2i\\\ninclude \"#{pf_conf.to_s}\"\n' /etc/pf.conf")
-	      else
-		bridge_line = execute(false, "grep -A 1 \"#{comment_mark_bridge}\" /etc/pf.conf | tail -1")
-		bridge_line = bridge_line.gsub("\"", "\\\"")
-		bridge_line = bridge_line.gsub("/", "\\/")
-		execute(false, "#{@sudo} sed -i '' '/#{bridge_line}/a\\\n#{comment_mark}\n' /etc/pf.conf")
-		execute(false, "#{@sudo} sed -i '' '/#{comment_mark}/a\\\ninclude \"#{pf_conf.to_s}\"\n' /etc/pf.conf")
-	      end
-	    end
-	  else
-	    execute(false, "echo \"#{comment_mark}\" | #{@sudo} tee -a /etc/pf.conf")
-	    execute(false, "echo \"include \\\"#{pf_conf.to_s}\\\"\" | #{@sudo} tee -a /etc/pf.conf")
-	  end
-	  restart_service('pf')
-	  #execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -f #{pf_conf.to_s}") 
+          check_or_create_default_pfconf(ui)
+	  execute(false, "#{@sudo} pfctl -a 'vagrant/#{id}' -f #{pf_conf.to_s}")
 	  #if !pf_enabled?
 	  #  execute(false, "#{@sudo} pfctl -e")
 	  #end
@@ -225,29 +228,16 @@ module VagrantPlugins
 	execute(false, "#{@sudo} sysctl net.inet.ip.forwarding=1 >/dev/null 2>&1")
 	execute(false, "#{@sudo} sysctl net.inet6.ip6.forwarding=1 >/dev/null 2>&1")
 
-	# Change pf's configuration
-	pf_conf = directory.join("pf.conf")
-	pf_conf.open("w") do |pf_file|
-	  pf_file.puts "set skip on #{bridge_name}"
+        check_or_create_default_pfconf(ui)
+	# set up bridge pf anchor
+        pf_bridge_conf = "/usr/local/etc/pf.#{bridge_name}.conf"
+	File.open(pf_bridge_conf, "w") do |pf_file|
 	  pf_file.puts "nat on #{gateway} from {#{sub_net}.0/24} to any -> (#{gateway})"
+	  pf_file.puts "pass quick on #{bridge_name}"
 	end
-	pf_bridge_conf = "/usr/local/etc/pf.#{bridge_name}.conf"
-	comment_mark = "# vagrant-bhyve #{bridge_name}"
-	execute(false, "#{@sudo} mv #{pf_conf.to_s} #{pf_bridge_conf}")
-	if execute(true, "test -s /etc/pf.conf") == 0
-	  if execute(true, "grep \"#{comment_mark}\" /etc/pf.conf") != 0
-	    execute(false, "#{@sudo} sed -i '' '1i\\\n#{comment_mark}\n' /etc/pf.conf")
-	    execute(false, "#{@sudo} sed -i '' '2i\\\ninclude \"#{pf_bridge_conf}\"\n' /etc/pf.conf")
-	  end
-	else
-	  execute(false, "echo \"#{comment_mark}\" | #{@sudo} tee -a /etc/pf.conf")
-	  execute(false, "echo \"include \\\"#{pf_bridge_conf}\\\"\" | #{@sudo} tee -a /etc/pf.conf")
-	end
-	restart_service('pf')
+
 	# Use pfctl to enable pf rules
-	#execute(false, "#{@sudo} cp #{pf_conf.to_s} /usr/local/etc/pf.#{bridge_name}.conf")
-	#execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge_name}' -f /usr/local/etc/pf.#{bridge_name}.conf")
-	# execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge_name}' -sr")
+	execute(false, "#{@sudo} pfctl -a 'vagrant/#{bridge_name}' -f /usr/local/etc/pf.#{bridge_name}.conf")
 
 	# Create a basic dnsmasq setting
 	# Basic settings
@@ -457,31 +447,19 @@ module VagrantPlugins
 	end
       end
 
-      def forward_port(forward_information, tap_device)
+      def forward_port(forward_information, tap_device, ui)
 	id		= get_attr('id')
 	ip_address	= get_ip_address(tap_device)
 	pf_conf 	= @data_dir.join('pf.conf')
 	rule 		= "rdr on #{forward_information[:adapter]} proto {udp, tcp} from any to any port #{forward_information[:host_port]} -> #{ip_address} port #{forward_information[:guest_port]}"
 
+        # FIXME: does this work for multiple port forwards, or should we rather set up a list with them and template that out to the pf.conf file?
 	pf_conf.open('a') do |pf_file|
 	  pf_file.puts rule
 	end
-	# Update pf rules
-	comment_mark = "# vagrant-bhyve #{tap_device}"
-	if execute(true, "test -s /etc/pf.conf") == 0
-	  if execute(true, "grep \"#{comment_mark}\" /etc/pf.conf") != 0
-	    execute(false, "#{@sudo} sed -i '' '1i\\\n#{comment_mark}\n' /etc/pf.conf")
-	    execute(false, "#{@sudo} sed -i '' '2i\\\ninclude \"#{pf_conf.to_s}\"\n' /etc/pf.conf")
-	  end
-	else
-	  execute(false, "echo \"#{comment_mark}\" | #{@sudo} tee -a /etc/pf.conf")
-	  execute(false, "echo \"include \\\"#{pf_conf.to_s}\\\"\" | #{@sudo} tee -a /etc/pf.conf")
-	end
-	restart_service('pf')
-	#execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -f #{pf_conf.to_s}")
-	#execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -sr")
-	#execute(false, "#{@sudo} pfctl -a vagrant_#{id} -F all")
 
+        check_or_create_default_pfconf(ui)
+	execute(false, "#{@sudo} pfctl -a 'vagrant/#{id}' -f #{pf_conf.to_s}")
       end
 
       def cleanup
@@ -497,11 +475,8 @@ module VagrantPlugins
 	execute(false, "#{@sudo} bhyvectl --destroy --vm=#{vm_name} >/dev/null 2>&1") if state(vm_name) == :uncleaned
 
 	# Clean instance-specific pf rules
-	#execute(false, "#{@sudo} pfctl -a '/vagrant_#{id}' -F all")
-	comment_mark_tap = "# vagrant-bhyve #{tap}"
-	if execute(true, "grep \"#{comment_mark_tap}\" /etc/pf.conf") == 0
-	  execute(false, "#{@sudo} sed -i '' '/#{comment_mark_tap}/,+1d' /etc/pf.conf")
-	end
+	execute(false, "#{@sudo} pfctl -a 'vagrant/#{id}' -F all")
+
 	# Destory tap interfaces
 	execute(false, "#{@sudo} ifconfig #{tap} destroy") if execute(true, "ifconfig #{tap}") == 0
 	execute(false, "#{@sudo} sed -i '' '/#{mac}/d' /var/run/dnsmasq.#{bridge}.leases") if execute(true, "grep \"#{mac}\" /var/run/dnsmasq.#{bridge}.leases") == 0
@@ -516,19 +491,15 @@ module VagrantPlugins
 	member_num = execute(false, "ifconfig #{bridge} | grep -c 'member' || true") if bridge_exist == 0
 
 	if bridge_exist != 0 || member_num.to_i < 2
-	  #execute(false, "#{@sudo} pfctl -a '/vagrant_#{bridge}' -F all")
-	  comment_mark_bridge = "# vagrant-bhyve #{bridge}"
-	  if execute(true, "grep \"#{comment_mark_bridge}\" /etc/pf.conf") == 0
-	    execute(false, "#{@sudo} sed -i '' '/#{comment_mark_bridge}/,+1d' /etc/pf.conf")
-	  end
-	  restart_service('pf')
+	  execute(false, "#{@sudo} pfctl -a 'vagrant/#{bridge}' -F all")
+
 	  #if directory.join('pf_disabled').exist?
 	  #  FileUtils.rm directory.join('pf_disabled')
 	  #  execute(false, "#{@sudo} pfctl -d")
 	  #end
 	  execute(false, "#{@sudo} ifconfig #{bridge} destroy") if bridge_exist == 0
-	  pf_conf = "/usr/local/etc/pf.#{bridge}.conf"
-	  execute(false, "#{@sudo} rm #{pf_conf}") if execute(true, "test -e #{pf_conf}") == 0
+	  pf_bridge_conf = "/usr/local/etc/pf.#{bridge}.conf"
+	  execute(false, "#{@sudo} rm #{pf_bridge_conf}") if execute(true, "test -e #{pf_bridge_conf}") == 0
 	  if execute(true, "test -e /var/run/dnsmasq.#{bridge}.pid") == 0
 	    dnsmasq_cmd = "dnsmasq -C /usr/local/etc/dnsmasq.#{bridge}.conf -l /var/run/dnsmasq.#{bridge}.leases -x /var/run/dnsmasq.#{bridge}.pid"
 	    dnsmasq_conf    = "/var/run/dnsmasq.#{bridge}.leases"
