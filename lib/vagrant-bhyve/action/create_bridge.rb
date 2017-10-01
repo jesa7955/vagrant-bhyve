@@ -21,7 +21,7 @@ module VagrantPlugins
 	  bridge_list 	= %w(vagrant_bhyve_default_bridge)
 	  # The bridge name is used as created bridge device's description
 	  bridge_list.each do |bridge|
-	    @driver.create_network_device(bridge, "bridge")
+	    @driver.create_network_device(bridge, "bridge", @ui)
 	    @driver.enable_nat(bridge, @ui)
 	  end
 	  @app.call(env)

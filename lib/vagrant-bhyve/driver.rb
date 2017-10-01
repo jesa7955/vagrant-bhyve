@@ -168,7 +168,7 @@ module VagrantPlugins
         end
       end
 
-      def create_network_device(device_name, device_type)
+      def create_network_device(device_name, device_type, ui)
 	return if device_name.length == 0
 
 	# Check whether the bridge has been created
@@ -189,12 +189,17 @@ module VagrantPlugins
 	  # with the bridge
 	  mtu = execute(false, "ifconfig #{bridge} | head -n1 | awk '{print $NF}'")
 	  execute(false, "#{@sudo} ifconfig #{interface_name} mtu #{mtu}") if mtu.length != 0 and mtu != '1500'
-	  execute(false, "#{@sudo} ifconfig #{bridge} addm #{interface_name}")
+          if execute(true, "ifconfig #{bridge} | grep -q \"member: #{interface_name}\"") != 0
+	    execute(false, "#{@sudo} ifconfig #{bridge} addm #{interface_name}")
+          else
+            ui.warn "#{interface_name} is already a member of #{bridge}"
+          end
+
 	  # Setup VM-specific pf rules
 	  id		= get_attr('id')
 	  pf_conf	= @data_dir.join('pf.conf')
 	  pf_conf.open('w') do |f|
-	    f.puts "set skip on #{interface_name}" 
+	    f.puts "pass quick on #{interface_name}"
 	  end
           check_or_create_default_pfconf(ui)
 	  execute(false, "#{@sudo} pfctl -a 'vagrant/#{id}' -f #{pf_conf.to_s}")
