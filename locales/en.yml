@@ -20,6 +20,9 @@ en:
         forward_ports: |-
           Setup port forwarding(if any).
         boot:
+          create_default_pfconf: |-
+            It seems you had no default pf configuration. A basic default
+            was set up for you in /etc/pf.conf
           setup_nat: |-
             Setting up a nat environment using pf and dnsmasq to provide 
             network for VMs. You will need to have dnsmasq installed on
@@ -88,3 +91,16 @@ en:
       not_found_leases_info: |-
         Unable to found IP from dnsmasq's leases file, please retry after a
         few seconds.
+      nat_anchor_not_found: |-
+        NAT will not work: your PF configuration does not contain a NAT
+        anchor. Add 'nat-anchor "vagrant/*"' to your PF configuration in
+        the TRANSLATION section. See pf.conf(5) for details.
+      rdr_anchor_not_found: |-
+        Port forwarding will not work: your PF configuration does not
+        contain a redirection anchor. Add 'rdr-anchor "vagrant/*"' to your
+        PF configuration in the TRANSLATION section. See pf.conf(5) for
+        details.
+      anchor_not_found: |-
+        Your PF configuration does not contain a filter anchor. Add
+        'anchor "vagrant/*"' to your PF configuration in the TRANSLATION
+        section. See pf.conf(5) for details.
